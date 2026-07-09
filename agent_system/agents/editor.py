@@ -1,0 +1,138 @@
+"""
+Note: For simplicity in the report, the final implementation round is described
+as occurring in the writer agent, but it actually happens here in the editor.
+"""
+
+import json
+import logging
+from agent_system.utils import parse_json_draft
+
+logger = logging.getLogger(__name__)
+
+class Editor:
+    def __init__(self, writer=None):
+        self.writer = writer
+        self.on_status = None
+
+    def _emit(self, message=None, milestone=None, reason=None):
+        if not self.on_status:
+            return
+        payload = {"step": "editor"}
+        if message is not None:
+            payload["message"] = message
+        if milestone:
+            payload["milestone"] = milestone
+        if reason:
+            payload["reason"] = reason
+        self.on_status(payload)
+
+    def implement_final_feedback(self, program: dict) -> dict:
+        """Run one last revision pass if there's unprocessed feedback.
+
+        Parameters
+        ----------
+        program:
+            The pipeline state dict. Must have 'feedback', 'draft', and
+            optionally 'week_number'.
+
+        Returns
+        -------
+        dict
+            The (possibly updated) program state.
+        """
+        if not program.get('feedback') or not self.writer:
+            return program
+
+        if program.get('feedback_applied'):
+            logger.info("Editor: feedback already applied by writer, skipping revise pass")
+            return program
+
+        week = program.get('week_number') or program.get('week_in_mesocycle', 1)
+        if week > 1:
+            logger.info("Editor: skipping final revision for progression (week %d)", week)
+            return program
+
+        logger.info("Editor: implementing final round of feedback")
+        self._emit(milestone="finalize", reason="Applying the final round of improvements")
+        try:
+            logger.info("Using revision mode (Week %d)", week)
+            program['draft'] = self.writer.revise(program, override_type="revision")
+            logger.info("Final feedback applied successfully")
+        except Exception as e:
+            logger.exception("Error implementing final feedback")
+        return program
+
+
+
+    def extract_weekly_program(self, data: "dict | str | None") -> dict:
+        """Extract weekly_program dict from various nested/stringified formats."""
+        return parse_json_draft(data)
+
+    def format_program(self, program: dict) -> dict:
+        """Validate and normalise the program into a consistent format for the web app.
+
+        Reads `program['draft']`, extracts the weekly_program structure, and
+        normalises every exercise entry to have the expected fields with defaults.
+
+        Parameters
+        ----------
+        program:
+            pipeline state dict. Must contain a 'draft' key.
+
+        Returns
+        -------
+        dict
+            ``{"weekly_program": {day: [exercise_dicts]}}``
+        """
+        draft = program.get('draft')
+        weekly_program = self.extract_weekly_program(draft)
+        if not weekly_program:
+            logger.warning("Editor.format_program: empty weekly_program extracted from draft")
+
+        validated = {}
+        for day, exercises in weekly_program.items():
+            validated[day] = []
+            for ex in exercises:
+                entry = {
+                    "name": ex.get("name", "Unnamed Exercise"),
+                    "sets": ex.get("sets", 3),
+                    "reps": ex.get("reps", "8-12"),
+                    "target_rir": ex.get("target_rir", "2-3"),
+                    "rest": ex.get("rest", "60-90 seconds"),
+                    "cues": ex.get("cues", "Focus on proper form"),
+                    "patterns": ex.get("patterns", []),
+                    "group": ex.get("group"),
+                    "technique": ex.get("technique"),
+                }
+                # Carry over progression suggestions if present
+                suggestion = (
+                    ex.get("AI Progression")
+                    or ex.get("suggestion")
+                    or ex.get("ai progression")
+                )
+                if suggestion:
+                    entry["suggestion"] = suggestion
+                validated[day].append(entry)
+
+        result = {"weekly_program": validated}
+        if isinstance(draft, dict) and draft.get("level"):
+            result["level"] = draft["level"]
+        # format_program builds a fresh dict, so the LLM backend's parse-failure
+        # flag would be lost here — carry it through so app.py can emit `error`
+        # instead of shipping this blank program as a green `done`.
+        if isinstance(draft, dict) and draft.get("_llm_error"):
+            result["_llm_error"] = True
+        return result
+
+    def __call__(self, program: dict[str, str | None]) -> dict[str, str | None]:
+        # First implement any final feedback
+        self._emit(milestone="finalize", reason="Tightening up the program")
+        program = self.implement_final_feedback(program)
+        self._emit(milestone="finalize", reason="Formatting your weekly layout")
+        formatted = self.format_program(program)
+        if 'feedback' in program:
+            formatted['critic_feedback'] = program['feedback']
+        if 'week_number' in program:
+            formatted['week_number'] = program['week_number']
+        program['formatted'] = formatted
+        return program
