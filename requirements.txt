@@ -1,0 +1,17 @@
+# LiftAI runtime dependencies — Claude (Agent SDK) backend.
+# Added 2026-06-14 as part of the Gemini -> Claude migration.
+# Requires Python 3.10+.
+
+# LLM backend (runs on the Claude subscription via the local `claude` CLI login;
+# authenticate once with `claude setup-token`). Replaces google-genai.
+claude-agent-sdk
+
+# Web app
+flask
+Flask-Session
+
+# PDF text extraction for brain ingestion tooling (scripts/brain_extract.py).
+pymupdf
+
+# Tests
+pytest
