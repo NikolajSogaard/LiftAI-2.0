@@ -1,0 +1,2574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LiftAI — Training Program</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* "Dark Aurora" — Gemini-style dark; the AI is a living blue→violet→cyan spectrum. --blue = logged (cyan) */
+      --bg:          #0E0F1A;
+      --surface:     #15172A;
+      --surface2:    #1B1E33;
+      --surface3:    #242843;
+      --border:      #262A42;
+      --border-mid:  #353A5C;
+      --text:        #ECEEF6;
+      --text-muted:  #A2A9C0;
+      --text-dim:    #818AA4;   /* AA-safe on dark surfaces */
+      --orange:      #FF6B2B;
+      --orange-dim:  rgba(255,107,43,0.12);
+      --orange-glow: rgba(255,107,43,0.34);
+      --ember-bright:#FFB347;
+      --ember-deep:  #E8453C;
+      --ember-line:  rgba(255,107,43,0.32);
+      --blue:        #EFA94A;
+      --blue-dim:    rgba(239,169,74,0.13);
+      --steel-line:  rgba(239,169,74,0.32);
+      --green:       #34D399;
+      --green-dim:   rgba(52,211,153,0.13);
+      --red:         #F87171;
+      --red-dim:     rgba(248,113,113,0.13);
+      --grad-ember:  linear-gradient(135deg, #FF9E2C, #FF4D6D);
+      --grad-heat:   linear-gradient(90deg, #FFB347, #FF6B2B 55%, #FF4D6D);
+      /* the AI spectrum — Gemini-style, animated while generating.
+         OKLCH interpolation keeps every transition vivid (no muddy sRGB midpoints).
+         -wide is the looping track: stops are spaced by hue distance so the scroll
+         runs at constant perceptual speed and the amber→indigo wrap is seamless,
+         not a fast smear. */
+      --grad-ai:     linear-gradient(90deg in oklch, #FFC24D, #FF9E2C, #FF6B2B, #FF4D6D, #E0468C);
+      --grad-ai-wide:linear-gradient(90deg in oklch, #FFC24D 0%, #FF9E2C 16%, #FF6B2B 36%, #FF4D6D 58%, #E0468C 78%, #FFC24D 100%);
+      --forged:      #FFFFFF;
+      --shadow-sm:   0 1px 2px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.24);
+      --shadow-md:   0 8px 24px -8px rgba(0,0,0,0.50);
+      --shadow-lg:   0 22px 56px -18px rgba(0,0,0,0.62);
+      --r-sm:        7px;
+      --r-md:        11px;
+      --r-lg:        16px;
+      --pill:        999px;
+      --fs-label:    0.6rem;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Dark Aurora: animated gradient background (Gemini-style) ── */
+    .aurora-bg {
+      position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+      background:
+        radial-gradient(58vw 42vw at 50% 116%, rgba(255,158,44,0.12), transparent 60%),
+        var(--bg);
+    }
+    .aurora-bg::before, .aurora-bg::after {
+      content: ''; position: absolute; border-radius: 50%;
+      filter: blur(90px); opacity: 0.5; mix-blend-mode: screen;
+    }
+    .aurora-bg::before {
+      width: 56vw; height: 56vw; left: -12vw; top: -16vw;
+      background: radial-gradient(circle, #FF7A3D, transparent 62%);
+      animation: auroraBgDrift 24s ease-in-out infinite;
+    }
+    .aurora-bg::after {
+      width: 50vw; height: 50vw; right: -12vw; top: -8vw;
+      background: radial-gradient(circle, #E0468C, transparent 62%);
+      animation: auroraBgDrift 30s ease-in-out infinite reverse;
+    }
+    @keyframes auroraBgDrift {
+      0%   { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+      50%  { transform: translate3d( 4%,  3%, 0) scale(1.15); }
+      100% { transform: translate3d(-2%,  2%, 0) scale(1.05); }
+    }
+
+    .btn:focus-visible,
+    .week-tab:focus-visible,
+    .ai-note-toggle:focus-visible,
+    .set-pill:focus-visible,
+    .close-button:focus-visible,
+    #chat-fab:focus-visible,
+    #chat-send:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--orange);
+      outline-offset: 2px;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding-bottom: 100px;
+      -webkit-font-smoothing: antialiased;
+      opacity: 0;
+    }
+    body.loaded { opacity: 1; transition: opacity 0.18s ease; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(16,18,32,0.72);
+      backdrop-filter: blur(12px) saturate(1.2);
+      -webkit-backdrop-filter: blur(12px) saturate(1.2);
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .logo {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 900;
+      font-size: 1.6rem;
+      line-height: 1;
+      letter-spacing: -0.5px;
+      text-decoration: none;
+    }
+    .logo .logo-lift { color: var(--text); }
+    .logo .logo-ai   {
+      background: var(--grad-ai-wide);
+      background-size: 300% auto;
+      -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+      animation: aiShift 9s linear infinite;
+    }
+    /* continuous one-direction flow (fluid, no ping-pong) + organic drift */
+    @keyframes aiShift { from { background-position: 0% 50%; } to { background-position: -300% 50%; } }
+    @keyframes auroraFlow { from { background-position: 0% 50%; } to { background-position: 250% 50%; } }
+    @keyframes auroraDrift {
+      0%   { transform: translate3d(-3%, -2%, 0) scale(1.06); }
+      50%  { transform: translate3d( 3%,  3%, 0) scale(1.14); }
+      100% { transform: translate3d(-2%,  2%, 0) scale(1.06); }
+    }
+
+    .week-indicator {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding-left: 18px;
+      margin-left: 16px;
+      border-left: 1px solid var(--border-mid);
+    }
+    .wi-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .wi-number {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.15rem;
+      color: var(--orange);
+      line-height: 1;
+    }
+
+    .header-nav { display: flex; align-items: center; gap: 20px; }
+    .header-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: var(--text); }
+
+    /* ── Layout ── */
+    .container {
+      width: 95%;
+      max-width: 900px;
+      margin: 24px auto;
+    }
+
+    /* ── Week tabs ── */
+    .week-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      opacity: 0;
+    }
+    body.loaded .week-tabs {
+      animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.06s both;
+    }
+    .week-tabs::-webkit-scrollbar { display: none; }
+
+    .week-tab {
+      padding: 10px 20px;
+      border: none;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+    .week-tab:hover { color: var(--text); }
+    .week-tab.active {
+      color: var(--orange);
+      border-bottom-color: var(--orange);
+    }
+    .week-tab .current-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--orange);
+      display: inline-block;
+    }
+
+    /* ── Week panels ── */
+    .week-panel { display: none; }
+    .week-panel.active { display: block; }
+
+    /* ── Day section ── */
+    .day-section {
+      margin-bottom: 28px;
+      opacity: 0;
+    }
+    body.loaded .day-section { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    body.loaded .day-section:nth-child(1) { animation-delay: 0.08s; }
+    body.loaded .day-section:nth-child(2) { animation-delay: 0.14s; }
+    body.loaded .day-section:nth-child(3) { animation-delay: 0.20s; }
+    body.loaded .day-section:nth-child(4) { animation-delay: 0.26s; }
+    body.loaded .day-section:nth-child(5) { animation-delay: 0.32s; }
+    body.loaded .day-section:nth-child(6) { animation-delay: 0.38s; }
+    body.loaded .day-section:nth-child(n+7) { animation-delay: 0.42s; }
+
+    .day-header {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      border-left: 3px solid var(--orange);
+      padding: 13px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .day-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .day-meta {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .day-meta-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.88rem;
+      color: var(--orange);
+    }
+    .day-meta-lbl {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .exercises-list { display: flex; flex-direction: column; }
+
+    /* ── Exercise card ── */
+    .exercise-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: none;
+      padding: 16px 18px;
+    }
+    .exercise-card:last-child {
+      border-bottom-left-radius: 10px;
+      border-bottom-right-radius: 10px;
+    }
+    .exercise-card + .exercise-card {
+      border-top: 1px solid var(--border);
+    }
+    /* Inline supersets: visually join A1+A2 cards into one group */
+    .exercise-card.superset-pair-top,
+    .exercise-card.superset-pair-bottom {
+      box-shadow: inset 2px 0 var(--orange);
+    }
+    .exercise-card.superset-pair-bottom {
+      border-top: 1px dashed var(--orange-glow);
+      padding-top: 8px;
+    }
+    .exercise-card.superset-pair-top {
+      padding-bottom: 8px;
+    }
+    .exercise-card.superset-pair-top .card-top,
+    .exercise-card.superset-pair-bottom .card-top {
+      margin-bottom: 4px;
+    }
+    .exercise-card.superset-pair-top .superset-tag {
+      margin-bottom: 2px;
+    }
+    .exercise-card.superset-pair-top .superset-line,
+    .exercise-card.superset-pair-bottom .superset-line {
+      line-height: 1.2;
+    }
+
+    /* Card top: name + visual metrics */
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .card-identity { flex: 1; min-width: 0; }
+
+    .exercise-name {
+      font-size: 0.97rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    /* Visual metric blocks */
+    .card-metrics {
+      display: flex;
+      align-items: stretch;
+      flex-shrink: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border-mid);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .metric-block {
+      padding: 5px 11px;
+      text-align: center;
+    }
+    .metric-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--blue);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .metric-lbl {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .metric-divider {
+      width: 1px;
+      background: var(--border-mid);
+      flex-shrink: 0;
+    }
+    .metric-rir-visual { position: relative; cursor: default; }
+    .metric-rir-visual .metric-val { color: var(--orange); }
+
+    /* RIR tooltip on the visual block */
+    .rir-tooltip {
+      display: none;
+      position: absolute;
+      right: 0; top: calc(100% + 6px);
+      background: var(--surface3);
+      border: 1px solid var(--border-mid);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      z-index: 50;
+      line-height: 1.7;
+      box-shadow: 0 8px 24px rgba(20,22,26,0.16);
+      min-width: 180px;
+      text-align: left;
+    }
+    .rir-tooltip strong { color: var(--text); display: block; margin-bottom: 4px; }
+    .metric-rir-visual:hover .rir-tooltip { display: block; }
+
+    /* Rest pill */
+    .rest-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+      margin-bottom: 10px;
+    }
+    .rest-pill::before {
+      content: '◷';
+      color: var(--text-dim);
+      font-size: 0.8rem;
+    }
+
+    /* AI note toggle */
+    .ai-note-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      cursor: pointer;
+      margin-bottom: 0;
+      padding: 5px 0;
+      transition: color 0.2s;
+      user-select: none;
+      width: fit-content;
+    }
+    .ai-note-toggle:hover { color: var(--text-muted); }
+    .ai-note-toggle svg { transition: transform 0.2s; flex-shrink: 0; }
+
+    .ai-note-content {
+      display: none;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+      line-height: 1.6;
+      padding: 8px 0 4px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 6px;
+    }
+    .ai-note-content.open { display: block; }
+
+    /* Progression suggestion */
+    .progression-suggestion {
+      background: rgba(56,189,248,0.06);
+      border: 1px solid rgba(56,189,248,0.15);
+      border-radius: 6px;
+      padding: 10px 13px;
+      margin: 10px 0;
+    }
+    .progression-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--blue);
+      margin-bottom: 5px;
+    }
+    .progression-body {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .performance-data { color: var(--text-muted); }
+    .adjustment {
+      margin-top: 4px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .arrow-up   { color: var(--green); font-weight: 700; }
+    .arrow-down { color: var(--red);   font-weight: 700; }
+
+    /* ── Set inputs ── */
+    .sets-section { margin-top: 10px; }
+
+    .set-row {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(42,42,42,0.7);
+    }
+    .set-row:last-child { border-bottom: none; }
+
+    .set-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--orange);
+    }
+
+    /* Fast-log pill UI */
+    .set-fields-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 52px;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .set-pill {
+      background: var(--orange-dim);
+      border: 1px dashed var(--ember-line);
+      border-radius: var(--r-sm);
+      min-height: 44px;   /* thumb-friendly */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .set-pill .pill-value:empty::before {
+      content: attr(data-placeholder);
+      color: var(--text-muted);
+      opacity: 0.55;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .set-pill input.pill-input {
+      width: 100%;
+      height: 44px;
+      background: var(--surface, #FFFFFF);
+      border: 1px solid var(--orange, #F2541B);
+      color: var(--blue, #2E6BE6);
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;     /* >=16px prevents iOS auto-zoom */
+      text-align: center;
+      border-radius: 8px;
+      outline: none;
+    }
+    .set-confirm {
+      background: var(--grad-ember);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-sm);
+      font-size: 20px;
+      font-weight: 700;
+      min-height: 44px;
+      cursor: pointer;
+    }
+    .set-confirm:disabled {
+      background: var(--surface2);
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+    /* Done state: row turns solid, pills read as blue numbers, ✓ turns green-outlined */
+    .set-row.done .set-pill {
+      border-style: solid;
+      border-color: var(--steel-line);
+      background: rgba(239,169,74,0.10);
+    }
+    .set-row.done .set-pill .pill-value {
+      color: var(--blue, #2E6BE6);
+    }
+    .set-row.done .set-confirm {
+      background: transparent;
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+    /* Pulse nudges the next un-confirmed ✓ */
+    @keyframes set-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(110,139,255,0.55); }
+      70%  { box-shadow: 0 0 0 10px rgba(110,139,255,0); }
+      100% { box-shadow: 0 0 0 0 rgba(110,139,255,0); }
+    }
+    .set-confirm.pulse {
+      animation: set-pulse 1.4s ease-out 2;
+    }
+    /* ── Reduced motion ──────────────────────────────────────────────────────
+       Honor the OS "reduce motion" preference: collapse decorative entrance,
+       scan, spin and pulse animations to their end state (entrance keyframes
+       use `both` fill, so content lands visible) while leaving focus/hover
+       colour feedback intact. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+    .set-confirm:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    .set-pill input.pill-input:focus-visible {
+      border-color: var(--blue);
+    }
+    /* Superset */
+    .superset-tag {
+      display: inline-block;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--orange);
+      background: var(--orange-dim);
+      border: 1px solid rgba(110,139,255,0.3);
+      border-radius: 3px;
+      padding: 1px 6px;
+      margin-bottom: 5px;
+    }
+
+    /* Intensity-technique badge (drop set, myo-reps, lengthened partials…) */
+    .technique-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--blue);
+      background: var(--blue-dim);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 3px;
+      padding: 2px 7px;
+      margin-top: 7px;
+      width: fit-content;
+      cursor: default;
+    }
+    .technique-badge::before {
+      content: '⚡';
+      font-size: 0.72rem;
+      line-height: 1;
+    }
+    .superset-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      line-height: 1.5;
+    }
+    .superset-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--orange);
+      flex-shrink: 0;
+      width: 20px;
+    }
+    .superset-name { font-size: 0.97rem; font-weight: 700; }
+
+    .superset-input-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--orange);
+      margin: 10px 0 4px;
+    }
+
+    /* Feedback area */
+    .feedback-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin: 10px 0 5px;
+    }
+    .feedback-area {
+      width: 100%;
+      padding: 8px 11px;
+      min-height: 50px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.79rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+      line-height: 1.5;
+    }
+    .feedback-area:focus { border-color: var(--orange); }
+    .feedback-area:disabled { opacity: 0.2; cursor: not-allowed; resize: none; }
+    .feedback-area::placeholder { color: var(--text-muted); }
+
+    /* Exercise letter badge */
+    .exercise-letter {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: var(--orange-dim);
+      color: var(--orange);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      margin-right: 7px;
+      flex-shrink: 0;
+      padding: 0 4px;
+    }
+
+    /* ── Sticky action bar ── */
+    .sticky-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(12,13,24,0.84);
+      backdrop-filter: blur(12px) saturate(1.2);
+      -webkit-backdrop-filter: blur(12px) saturate(1.2);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -6px 24px -12px rgba(0,0,0,0.5);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      z-index: 150;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--grad-ember);
+      color: #fff;
+      box-shadow: 0 3px 14px var(--orange-glow);
+    }
+    .btn-primary:hover { filter: brightness(1.07); box-shadow: 0 0 22px var(--orange-glow); }
+    .btn-primary:active { transform: scale(0.97); }
+    /* AI-invoking actions wear the spectrum (vs orange = your manual actions) */
+    .btn-ai {
+      background: var(--grad-ai);
+      background-size: 180% auto;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(255,107,43,0.32);
+    }
+    .btn-ai:hover { background-position: right center; filter: brightness(1.04); box-shadow: 0 6px 22px rgba(255,107,43,0.42); }
+
+    .btn-save {
+      background: transparent;
+      border: 1px solid var(--orange);
+      color: var(--orange);
+    }
+    .btn-save:hover { background: var(--orange-dim); }
+
+    .btn-danger {
+      background: transparent;
+      border: 1px solid var(--border-mid);
+      color: var(--text-muted);
+    }
+    .btn-danger:hover { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(20,22,26,0.42);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--border-mid);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      width: 360px;
+      max-width: 92vw;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .modal-header h2 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .close-button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.2s;
+    }
+    .close-button:hover { color: var(--text); }
+
+    #save-program-form label {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    #save-program-form input[type="text"] {
+      width: 100%;
+      padding: 9px 13px;
+      border: 1px solid var(--border-mid);
+      border-radius: 5px;
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+      margin-bottom: 14px;
+      transition: border-color 0.2s;
+    }
+    #save-program-form input[type="text"]:focus { border-color: var(--orange); }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 400;
+    }
+    .toast {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.83rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-md);
+      pointer-events: auto;
+      animation: toastIn 0.25s ease;
+      max-width: min(90vw, 360px);
+      white-space: normal;
+    }
+    .toast-success { background: var(--surface); border: 1px solid rgba(52,211,153,0.4); color: var(--green); box-shadow: var(--shadow-md); }
+    .toast-error   { background: var(--surface); border: 1px solid rgba(248,113,113,0.4); color: var(--red); box-shadow: var(--shadow-md); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 16px 24px 120px;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    /* ── Animations ── */
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .header { padding: 12px 16px; }
+      .week-indicator { display: none; }
+      .container { width: 98%; }
+      .card-top { flex-direction: column; gap: 8px; }
+      .card-metrics { align-self: flex-start; }
+      .sticky-bar { padding: 10px 12px; gap: 7px; }
+      .btn { padding: 9px 13px; font-size: 0.82rem; }
+      .week-stats-card { gap: 6px; }
+      .ws-item { padding: 10px 6px; }
+      .ws-val { font-size: 1.2rem; }
+      .set-fields-row { gap: 4px; grid-template-columns: 1fr 1fr 1fr 48px; }
+    }
+
+    /* ── Weekly stats card (top of each week panel) ───────────────────────── */
+    .week-stats-card {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .ws-item {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-sm);
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .ws-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.45rem;
+      color: var(--orange);
+      line-height: 1.1;
+    }
+    .ws-item.logged .ws-val { color: var(--blue); }
+    .ws-item.pct .ws-val    { color: var(--green); }
+    .ws-lbl {
+      font-size: 0.66rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* ── Inline "last time" hint on an exercise ───────────────────────────── */
+    .last-time {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 8px 0 2px;
+      padding: 6px 10px;
+      background: var(--blue-dim);
+      border-radius: 7px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--blue);
+    }
+    .last-time .lt-tag {
+      font-size: 0.6rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    /* ── Progress tab ─────────────────────────────────────────────────────── */
+    .progress-h {
+      font-size: 0.78rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 4px 0 14px;
+    }
+    .progress-section + .progress-section { margin-top: 34px; }
+    .vol-bars { display: flex; flex-direction: column; gap: 10px; }
+    .vol-row { display: flex; align-items: center; gap: 10px; }
+    .vol-wk {
+      flex: 0 0 48px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .vol-track {
+      position: relative;
+      flex: 1;
+      height: 22px;
+      background: var(--surface2);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .vol-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      border-radius: 6px;
+    }
+    .vol-fill.planned { background: var(--orange-dim); }
+    .vol-fill.logged  { background: var(--blue); opacity: 0.85; }
+    .vol-num {
+      flex: 0 0 64px;
+      text-align: right;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text);
+    }
+    /* Per-movement-pattern weekly volume panel */
+    .mv-panel { margin: 16px 0 6px; }
+    .mv-h {
+      font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-muted); margin: 4px 0 12px;
+    }
+    .mv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 520px) { .mv-grid { grid-template-columns: 1fr; } }
+    .mv-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-md); padding: 10px 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .mv-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+    .mv-name { font-size: 0.86rem; color: var(--text); }
+    .mv-num { font-family: 'DM Mono', monospace; font-size: 0.74rem; color: var(--text-muted); }
+    .mv-track { height: 8px; background: var(--surface2); border-radius: 5px; overflow: hidden; }
+    .mv-fill { height: 100%; border-radius: 5px; background: var(--text-muted); }
+    .mv-in_range .mv-fill { background: var(--green); } .mv-in_range .mv-num { color: var(--green); }
+    .mv-under .mv-fill { background: var(--orange); }   .mv-under .mv-num { color: var(--orange); }
+    .mv-over .mv-fill { background: var(--red); }        .mv-over .mv-num { color: var(--red); }
+    /* Supersets — structured group bracket rail */
+    .ss-rail { border-left: 3px solid var(--orange); border-radius: 9px; padding: 2px 0 2px 4px; margin: 8px 0; background: var(--orange-dim); }
+    .ss-head { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--orange); padding: 8px 12px 2px; }
+    .ss-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 5px; margin-right: 8px; border-radius: 6px; background: var(--surface2); color: var(--orange); font-family: 'DM Mono', monospace; font-size: 0.72rem; font-weight: 700; }
+    .ex-prog-list { display: flex; flex-direction: column; gap: 8px; }
+    .ex-prog-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-sm);
+      padding: 10px 14px;
+    }
+    .ep-name { flex: 1; font-size: 0.9rem; color: var(--text); }
+    .ep-flag {
+      font-size: 0.62rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    .ep-flag.ep-progressing { background: var(--green-dim); color: var(--green); }
+    .ep-flag.ep-stalled     { background: var(--red-dim);   color: var(--red); }
+    .ep-load {
+      flex: 0 0 80px;
+      text-align: right;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .ep-empty {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      padding: 8px 2px;
+    }
+    /* Collapsible per-exercise week-by-week tables */
+    .ep-row { border: 1px solid var(--border); border-radius: 9px; margin: 6px 0; overflow: hidden; }
+    .ep-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; background: var(--forged); }
+    .ep-delta { font-family: 'DM Mono', monospace; font-size: 0.82rem; color: var(--green); }
+    .ep-delta.neg { color: var(--red); }
+    .ep-body { display: none; padding: 2px 14px 12px; }
+    .ep-row.open .ep-body { display: block; }
+    table.ep-t { width: 100%; border-collapse: collapse; }
+    table.ep-t th, table.ep-t td { padding: 5px 6px; font-size: 0.78rem; border-bottom: 1px solid var(--border); text-align: left; }
+    table.ep-t th { color: var(--text-muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.6px; }
+    table.ep-t td.n { text-align: right; font-family: 'DM Mono', monospace; color: var(--text); }
+  </style>
+</head>
+
+<body>
+  <div class="aurora-bg" aria-hidden="true"></div>
+  <div class="header">
+    <div class="header-left">
+      <a class="logo" href="{{ url_for('generate_program') }}">
+        <span class="logo-lift">LIFT</span><span class="logo-ai">AI</span>
+      </a>
+      <div class="week-indicator">
+        <span class="wi-label">Week</span>
+        <span class="wi-number">{{ current_week }}</span>
+      </div>
+    </div>
+    <div class="header-nav">
+      <a href="{{ url_for('generate_program') }}">New Program</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Week tabs -->
+    {% if programs|length > 1 %}
+    <div class="week-tabs" id="week-tabs" role="tablist" aria-label="Training weeks">
+      {% for week_program in programs %}
+      <div class="week-tab {% if week_program.week == current_week %}active{% endif %}"
+           id="week-tab-{{ week_program.week }}"
+           role="tab"
+           data-week="{{ week_program.week }}"
+           aria-controls="week-panel-{{ week_program.week }}"
+           aria-selected="{{ 'true' if week_program.week == current_week else 'false' }}"
+           tabindex="{{ '0' if week_program.week == current_week else '-1' }}"
+           onclick="switchWeek({{ week_program.week }})">
+        Week {{ week_program.week }}
+        {% if week_program.week == current_week %}
+        <span class="current-dot" title="Current week"></span>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="week-tab"
+           id="week-tab-progress"
+           role="tab"
+           data-week="progress"
+           aria-controls="week-panel-progress"
+           aria-selected="false"
+           tabindex="-1"
+           onclick="switchWeek('progress')">Progress</div>
+    </div>
+    {% endif %}
+
+    <form action="{{ url_for('next_week') }}" method="post" id="training-form">
+
+      {% for week_program in programs %}
+      <div class="week-panel {% if week_program.week == current_week %}active{% endif %}"
+           id="week-panel-{{ week_program.week }}"
+           {% if programs|length > 1 %}role="tabpanel" aria-labelledby="week-tab-{{ week_program.week }}" tabindex="0"{% endif %}>
+
+        {% set wv = weekly_stats.get(week_program.week) if weekly_stats else None %}
+        {% if wv and wv.prescribed_sets %}
+        <div class="week-stats-card">
+          <div class="ws-item">
+            <div class="ws-val">{{ wv.prescribed_sets }}</div>
+            <div class="ws-lbl">Sets planned</div>
+          </div>
+          <div class="ws-item logged">
+            <div class="ws-val">{{ wv.logged_sets }}</div>
+            <div class="ws-lbl">Sets logged</div>
+          </div>
+          <div class="ws-item pct">
+            <div class="ws-val">{{ (wv.logged_sets / wv.prescribed_sets * 100)|round|int }}%</div>
+            <div class="ws-lbl">Completed</div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% for day, exercises in week_program.program.items() %}
+        <div class="day-section">
+
+          <div class="day-header">
+            <span class="day-name">{{ day }}</span>
+            <div class="day-meta">
+              <span class="day-meta-num">{{ exercises|length }}</span>
+              <span class="day-meta-lbl">Exercise{% if exercises|length != 1 %}s{% endif %}</span>
+            </div>
+          </div>
+
+          <div class="exercises-list">
+            {% for exercise in exercises %}
+            {% set exercise_index = loop.index0 %}
+
+            <div class="exercise-card" data-group="{{ exercise.group|default('', true) }}">
+              <!-- Hidden name field -->
+              <input type="hidden"
+                     name="{{ week_program.week }}_{{ day.replace(' ', '') }}_ex{{ exercise_index }}_name"
+                     value="{{ exercise.name }}">
+
+              <!-- Hidden machine-readable badges for extractProgramFromDOM() -->
+              <span class="badge-sets" style="display:none">{{ exercise.sets|default(3, true) }} × {{ exercise.reps|default('8-12', true) }}</span>
+              <span class="badge-rir" style="display:none">ⓘ RIR {{ exercise.target_rir }}</span>
+
+              <!-- Card top: name + visual metrics -->
+              <div class="card-top">
+                <div class="card-identity">
+                  <div class="exercise-name">{{ exercise.name }}</div>
+                  {% if exercise.technique %}
+                  <div class="technique-badge" title="Intensity technique on the last set — see the coach note for how to perform it">{{ exercise.technique }}</div>
+                  {% endif %}
+                </div>
+                <div class="card-metrics">
+                  <div class="metric-block metric-sets">
+                    <div class="metric-val">{{ exercise.sets|default(3, true) }}×{{ exercise.reps|default('8-12', true) }}</div>
+                    <div class="metric-lbl">Sets×Reps</div>
+                  </div>
+                  <div class="metric-divider"></div>
+                  <div class="metric-block metric-rir-visual">
+                    <div class="metric-val">{{ exercise.target_rir }}</div>
+                    <div class="metric-lbl">RIR ⓘ</div>
+                    <div class="rir-tooltip">
+                      <strong>RIR Scale (Reps In Reserve)</strong>
+                      0 — Maximum effort, failure<br>
+                      1 — Very hard, 1 rep left<br>
+                      2 — Hard, 2 reps left<br>
+                      3 — Moderate, 3 reps left<br>
+                      4+ — Very easy, 4+ reps left
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rest -->
+              {% if exercise.rest %}
+              <div class="rest-pill">Rest: {{ exercise.rest }}</div>
+              {% endif %}
+
+              <!-- Collapsible AI note -->
+              {% if exercise.cues %}
+              <div class="ai-note-toggle" onclick="toggleNote(this)">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                  <path d="M2 3l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                </svg>
+                Coach note
+              </div>
+              <div class="ai-note-content">{{ exercise.cues }}</div>
+              {% endif %}
+
+              <!-- Progression suggestion (Week 2+) -->
+              {% if week_program.week > 1 and exercise.suggestion is defined and exercise.suggestion %}
+              <div class="progression-suggestion">
+                <div class="progression-label">Week {{ week_program.week }} suggestion</div>
+                <div class="progression-body ai-progression">{{ exercise.suggestion }}</div>
+              </div>
+              {% endif %}
+
+              <!-- Last-time performance for this exercise -->
+              {% set lt = last_time.get(week_program.week ~ '|' ~ exercise.name) if last_time else None %}
+              {% if lt %}
+              <div class="last-time">
+                <span class="lt-tag">Last time · Wk {{ lt.week }}</span>
+                {{ lt.weight }} kg × {{ lt.reps }}{% if lt.actual_rir %} @ RIR {{ lt.actual_rir }}{% endif %}
+              </div>
+              {% endif %}
+
+              <!-- Per-set inputs (pill UI + hidden form inputs) -->
+              <div class="sets-section">
+                {% set day_key = day.replace(' ', '') %}
+                {% for i in range(exercise.sets|default(3, true)) %}
+                  {% set prior_key = (week_program.week - 1) ~ '|' ~ day ~ '|' ~ exercise_index ~ '|' ~ i %}
+                  {% set prior_weight = set_log.get(prior_key, {}).get('weight', '') if set_log else '' %}
+                  {% set is_editable = (week_program.week == current_week) %}
+                  <div class="set-row"
+                       data-week="{{ week_program.week }}"
+                       data-day="{{ day }}"
+                       data-exercise-index="{{ exercise_index }}"
+                       data-set-index="{{ i }}"
+                       data-reps-target="{{ exercise.reps|default('', true) }}"
+                       data-rir-target="{{ exercise.target_rir|default('', true) }}"
+                       data-prior-weight="{{ prior_weight }}">
+                    <span class="set-label">S{{ i+1 }}</span>
+                    <div class="set-fields-row">
+                      <div class="set-pill" data-field="weight">
+                        <span class="pill-value" data-placeholder="kg">{{ prior_weight }}</span>
+                      </div>
+                      <div class="set-pill" data-field="reps">
+                        <span class="pill-value" data-placeholder="reps"></span>
+                      </div>
+                      <div class="set-pill" data-field="actual_rir">
+                        <span class="pill-value" data-placeholder="RIR"></span>
+                      </div>
+                      <button type="button" class="set-confirm" aria-label="Confirm set"
+                              {% if not is_editable %}disabled{% endif %}>✓</button>
+                    </div>
+
+                    <!-- Hidden inputs keep the existing /next_week form contract intact -->
+                    <input type="hidden"
+                           name="{{ week_program.week }}_{{ day_key }}_ex{{ exercise_index }}_set{{ i }}_weight"
+                           value="{{ prior_weight }}">
+                    <input type="hidden"
+                           name="{{ week_program.week }}_{{ day_key }}_ex{{ exercise_index }}_set{{ i }}_reps"
+                           value="">
+                    <input type="hidden"
+                           name="{{ week_program.week }}_{{ day_key }}_ex{{ exercise_index }}_set{{ i }}_actual_rir"
+                           value="">
+                  </div>
+                {% endfor %}
+              </div>
+
+              <!-- Overall feedback (current week only — past weeks have no saved note to show) -->
+              {% if week_program.week == current_week %}
+              <div class="feedback-label">Notes</div>
+              <textarea class="feedback-area"
+                        name="{{ week_program.week }}_{{ day.replace(' ', '') }}_ex{{ exercise_index }}_feedback"
+                        placeholder="Form cues, how it felt, anything notable…"></textarea>
+              {% endif %}
+
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+      {% endfor %}
+
+      {% if muscle_volume %}
+      <!-- Per-movement-pattern volume for the current week (visible from week 1) -->
+      <div class="mv-panel">
+        <div class="mv-h">Volume by movement pattern · this week</div>
+        <div class="mv-grid">
+          {% for m in muscle_volume %}
+          <div class="mv-card mv-{{ m.status }}">
+            <div class="mv-top">
+              <span class="mv-name">{{ m.description }}</span>
+              <span class="mv-num">{{ m.sets }} / {{ m.min }}–{{ m.max }}</span>
+            </div>
+            <div class="mv-track">
+              <div class="mv-fill" style="width: {{ [ (m.sets / m.max * 100), 100 ]|min|round|int }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if programs|length > 1 %}
+      <!-- Progress tab: cross-week volume + per-exercise progress -->
+      <div class="week-panel" id="week-panel-progress" role="tabpanel" aria-labelledby="week-tab-progress" tabindex="0">
+        <div class="progress-section">
+          <div class="progress-h">Set volume by week</div>
+          {% set maxsets = (weekly_volume | map(attribute='prescribed_sets') | max) or 1 %}
+          <div class="vol-bars">
+            {% for wv in weekly_volume %}
+            <div class="vol-row">
+              <span class="vol-wk">Wk {{ wv.week }}</span>
+              <div class="vol-track">
+                <div class="vol-fill planned" style="width: {{ (wv.prescribed_sets / maxsets * 100)|round|int }}%"></div>
+                <div class="vol-fill logged" style="width: {{ (wv.logged_sets / maxsets * 100)|round|int }}%"></div>
+              </div>
+              <span class="vol-num">{{ wv.logged_sets }}/{{ wv.prescribed_sets }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-h">Per-exercise progress</div>
+          {% for name, s in exercise_series.items() %}
+          <div class="ep-row" role="button" tabindex="0" aria-expanded="false" onclick="toggleEpRow(this)">
+            <div class="ep-head">
+              <span class="ep-name">{{ name }}</span>
+              <span class="ep-delta {{ 'neg' if s.delta < 0 else '' }}">{{ '%+g' % s.delta }} kg ▾</span>
+            </div>
+            <div class="ep-body">
+              <table class="ep-t">
+                <tr><th>Week</th><th style="text-align:right;">Top set</th><th style="text-align:right;">Reps</th><th style="text-align:right;">e1RM</th></tr>
+                {% for r in s.rows %}
+                <tr><td>W{{ r.week }}</td><td class="n">{{ r.weight }}</td><td class="n">{{ r.reps|int }}</td><td class="n">{{ r.e1rm }}</td></tr>
+                {% endfor %}
+              </table>
+            </div>
+          </div>
+          {% else %}
+          <div class="ep-empty">Log a few sets across weeks to see per-exercise trends here.</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </form>
+  </div>
+
+  <!-- Sticky action bar -->
+  <div class="sticky-bar">
+    <input type="hidden" name="week_number" value="{{ current_week }}" form="training-form">
+    <button type="submit" form="training-form" class="btn btn-primary btn-ai">
+      Generate Week {{ current_week + 1 }}
+    </button>
+    <button type="button" class="btn btn-save" id="open-save-modal">
+      Save Program
+    </button>
+    <a href="{{ url_for('generate_program') }}" style="text-decoration:none;">
+      <button type="button" class="btn btn-danger">Start New</button>
+    </a>
+  </div>
+
+  <!-- Save modal -->
+  <div id="save-program-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Save Program</h2>
+        <button class="close-button">&times;</button>
+      </div>
+      <form id="save-program-form">
+        <label for="program-name">Program Name</label>
+        <input type="text" id="program-name" name="program_name" placeholder="My Training Program">
+        <button type="submit" class="btn btn-primary" style="width:100%;">Save</button>
+      </form>
+      <div id="save-message" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <footer>LiftAI &mdash; AI-Powered Strength Training</footer>
+
+  <!-- ── Chat UI ── -->
+  <style>
+    #chat-fab {
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 48px; height: 48px;
+      border-radius: 8px;
+      background: var(--orange);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px var(--orange-glow);
+      z-index: 300;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #chat-fab:hover {
+      transform: scale(1.06);
+      box-shadow: 0 6px 28px rgba(255,107,43,0.5);
+    }
+    #chat-fab svg { width: 20px; height: 20px; fill: #fff; }
+
+    #chat-panel {
+      position: fixed;
+      bottom: 72px;
+      right: 0;
+      width: 380px;
+      max-width: 95vw;
+      height: 560px;
+      max-height: calc(100vh - 140px);
+      background: var(--surface);
+      border: 1px solid var(--border-mid);
+      border-radius: 12px 0 0 12px;
+      display: flex;
+      flex-direction: column;
+      z-index: 299;
+      box-shadow: -8px 0 40px -8px rgba(20,22,26,0.18);
+      transform: translateX(100%);
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #chat-panel.open { transform: translateX(0); }
+
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .chat-header-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .chat-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+    #chat-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.2s;
+    }
+    #chat-close:hover { color: var(--text); }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    #chat-messages::-webkit-scrollbar { width: 3px; }
+    #chat-messages::-webkit-scrollbar-track { background: transparent; }
+    #chat-messages::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+    .chat-msg {
+      max-width: 86%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      word-wrap: break-word;
+    }
+    .chat-msg-user {
+      background: var(--grad-ember);
+      color: #fff;
+      font-weight: 500;
+      align-self: flex-end;
+      border-bottom-right-radius: 3px;
+    }
+    .chat-msg-bot {
+      background: var(--surface2);
+      color: var(--text);
+      align-self: flex-start;
+      border-bottom-left-radius: 3px;
+    }
+    .chat-msg-edit {
+      background: var(--green-dim);
+      border: 1px solid rgba(74,222,128,0.25);
+      color: var(--green);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.73rem;
+      align-self: flex-start;
+      border-radius: 5px;
+    }
+    .chat-typing {
+      align-self: flex-start;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .typing-dots span {
+      display: inline-block;
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: typingBounce 1.2s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #chat-input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid var(--border-mid);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.86rem;
+      outline: none;
+      resize: none;
+      min-height: 50px;
+      max-height: 130px;
+      transition: border-color 0.2s;
+    }
+    #chat-input:focus { border-color: var(--orange); }
+    #chat-input::placeholder { color: var(--text-muted); }
+
+    #chat-send {
+      padding: 9px 14px;
+      background: var(--grad-ember);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: filter 0.15s;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+    #chat-send:hover { filter: brightness(1.08); }
+    #chat-send:disabled { opacity: 0.45; cursor: not-allowed; }
+  </style>
+
+  <!-- Floating chat button -->
+  <button id="chat-fab" title="Chat with LiftAI Coach" onclick="toggleChat()">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 2H4C2.9 2 2 2.9 2 4v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+    </svg>
+  </button>
+
+  <!-- Chat panel -->
+  <div id="chat-panel">
+    <div class="chat-header">
+      <div class="chat-header-title">
+        <div class="chat-status-dot"></div>
+        LiftAI Coach
+      </div>
+      <button id="chat-close" onclick="toggleChat()">&times;</button>
+    </div>
+    <div id="chat-messages" role="log" aria-live="polite">
+      <div class="chat-msg chat-msg-bot">
+        Hi! I'm your LiftAI Coach. Ask me anything about your program, or tell me what you'd like to change — I can edit it live.
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" rows="1" aria-label="Message the coach" placeholder="Ask me anything or say 'change bench to 4 sets'…"></textarea>
+      <button id="chat-send" onclick="sendChatMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Toast ──────────────────────────────────────────────────────────────────
+    function showToast(message, type) {
+      var container = document.getElementById('toast-container');
+      var toast = document.createElement('div');
+      toast.className = 'toast toast-' + (type || 'success');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(function() { toast.remove(); }, 300);
+      }, 3000);
+    }
+
+    // ── Week tab switching ─────────────────────────────────────────────────────
+    function switchWeek(week) {
+      var key = String(week);
+      document.querySelectorAll('.week-tab').forEach(function(tab) {
+        var on = String(tab.dataset.week) === key;
+        tab.classList.toggle('active', on);
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        tab.tabIndex = on ? 0 : -1;
+      });
+      document.querySelectorAll('.week-panel').forEach(function(panel) {
+        panel.classList.toggle('active', panel.id === 'week-panel-' + key);
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Week tabs: keyboard navigation (WAI-ARIA tabs, automatic activation) ──
+    (function () {
+      var tablist = document.getElementById('week-tabs');
+      if (!tablist) return;
+      tablist.addEventListener('keydown', function (e) {
+        var tabs = Array.prototype.slice.call(tablist.querySelectorAll('.week-tab'));
+        var i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;
+        var target;
+        switch (e.key) {
+          case 'ArrowRight': case 'ArrowDown': target = tabs[(i + 1) % tabs.length]; break;
+          case 'ArrowLeft':  case 'ArrowUp':   target = tabs[(i - 1 + tabs.length) % tabs.length]; break;
+          case 'Home': target = tabs[0]; break;
+          case 'End':  target = tabs[tabs.length - 1]; break;
+          case 'Enter': case ' ': target = tabs[i]; break;
+          default: return;
+        }
+        e.preventDefault();
+        switchWeek(target.dataset.week);
+        target.focus();
+      });
+    })();
+
+    // ── Per-exercise progress rows: keyboard-operable disclosure ──
+    function toggleEpRow(row) {
+      var open = row.classList.toggle('open');
+      row.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var row = e.target.closest && e.target.closest('.ep-row');
+      if (!row) return;
+      e.preventDefault();
+      toggleEpRow(row);
+    });
+
+    // ── AI note toggle ─────────────────────────────────────────────────────────
+    function toggleNote(toggleEl) {
+      var content = toggleEl.nextElementSibling;
+      var isOpen = content.classList.toggle('open');
+      var svg = toggleEl.querySelector('svg');
+      svg.style.transform = isOpen ? 'rotate(-180deg)' : '';
+      svg.style.transition = 'transform 0.2s';
+    }
+
+    // ── Save modal ────────────────────────────────────────────────────────────
+    var modal         = document.getElementById('save-program-modal');
+    var openModalBtn  = document.getElementById('open-save-modal');
+    var closeModalBtn = document.querySelector('.close-button');
+    var saveForm      = document.getElementById('save-program-form');
+    var saveMessage   = document.getElementById('save-message');
+
+    function openModal() {
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      var nameInput = document.getElementById('program-name');
+      if (nameInput) nameInput.focus();
+    }
+    function closeModal() {
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+      saveMessage.style.display = 'none';
+    }
+    openModalBtn.addEventListener('click', openModal);
+    closeModalBtn.addEventListener('click', closeModal);
+    window.addEventListener('click', function(event) {
+      if (event.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+
+    saveForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      var formData = new FormData(saveForm);
+      fetch('{{ url_for("save_program") }}', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          closeModal();
+          saveForm.reset();
+          showToast(data.message, data.success ? 'success' : 'error');
+        })
+        .catch(function() { showToast('Error saving program.', 'error'); });
+    });
+
+    // ── Exercise letter labels (A, B, C… / supersets A1·A2·A3) ────────────────
+    function applyExerciseLabels(daySection) {
+      var cards = Array.prototype.slice.call(daySection.querySelectorAll('.exercise-card'));
+      var letterCode = 65; // 'A'
+      var i = 0;
+      while (i < cards.length) {
+        var card = cards[i];
+        var group = (card.dataset.group || '').trim();
+        if (group) {
+          // Collect the consecutive run sharing this group letter.
+          var run = [card];
+          var j = i + 1;
+          while (j < cards.length && (cards[j].dataset.group || '').trim() === group) {
+            run.push(cards[j]); j++;
+          }
+          var letter = String.fromCharCode(letterCode++);
+          var rail = document.createElement('div');
+          rail.className = 'ss-rail';
+          var head = document.createElement('div');
+          head.className = 'ss-head';
+          head.textContent = 'Superset ' + letter;
+          card.parentNode.insertBefore(rail, card);
+          rail.appendChild(head);
+          run.forEach(function(c, idx) {
+            var nm = c.querySelector('.exercise-name');
+            if (nm) {
+              var raw = (nm.dataset.rawName || nm.textContent).trim();
+              nm.dataset.rawName = raw;
+              nm.innerHTML = '<span class="ss-badge">' + letter + (idx + 1) + '</span>' + raw;
+            }
+            rail.appendChild(c);
+          });
+          i = j;
+        } else {
+          var letter2 = String.fromCharCode(letterCode++);
+          var nm2 = card.querySelector('.exercise-name');
+          if (nm2) {
+            var raw2 = (nm2.dataset.rawName || nm2.textContent).trim();
+            nm2.dataset.rawName = raw2;
+            if (!legacyLabel(nm2, raw2, letter2)) {
+              nm2.innerHTML = '<span class="exercise-letter">' + letter2 + '</span>' + raw2;
+            }
+          }
+          i += 1;
+        }
+      }
+    }
+
+    // Legacy name-string superset parsing — only for old programs without a group field.
+    function legacyLabel(nameEl, raw, letter) {
+      var lower = raw.toLowerCase();
+      if (lower.startsWith('superset:') || lower.startsWith('superset -')) {
+        var parts = raw.replace(/^superset[:\-]\s*/i, '').split(/\s*(?:&|\/| and )\s*/i);
+        if (parts.length >= 2) {
+          var html = '';
+          for (var k = 0; k < parts.length; k++) {
+            html += '<div class="superset-line"><span class="ss-badge">' + letter + (k + 1) + '</span>' + parts[k].trim() + '</div>';
+          }
+          nameEl.innerHTML = html;
+          return true;
+        }
+      }
+      var m = raw.match(/^(.*?)\s*\(\s*superset\s+[A-Z]\s*\d\s*\)\s*$/i);
+      if (m) {
+        nameEl.innerHTML = '<span class="ss-badge">' + letter + '</span>' + m[1].trim();
+        return true;
+      }
+      return false;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.day-section').forEach(applyExerciseLabels);
+    });
+
+    // ── Superset: duplicate set inputs for A2 ────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.exercise-card').forEach(function(card) {
+        // Structured supersets keep their own per-card set inputs — skip the legacy clone.
+        if ((card.dataset.group || '').trim()) return;
+        // Inline-pair supersets already have their own set inputs on each card
+        if (card.classList.contains('superset-pair-top') || card.classList.contains('superset-pair-bottom')) return;
+        var nameEl = card.querySelector('.exercise-name');
+        if (!nameEl || !nameEl.querySelector('.superset-tag')) return;
+
+        var setsSection = card.querySelector('.sets-section');
+        if (!setsSection) return;
+
+        var a1Label = document.createElement('div');
+        a1Label.className = 'superset-input-label';
+        a1Label.textContent = 'A1';
+        setsSection.parentNode.insertBefore(a1Label, setsSection);
+
+        var a2Section = setsSection.cloneNode(true);
+        a2Section.querySelectorAll('input').forEach(function(inp) {
+          inp.name = inp.name.replace(/_set(\d+)_/, '_a2set$1_');
+          inp.value = '';
+        });
+
+        var a2Label = document.createElement('div');
+        a2Label.className = 'superset-input-label';
+        a2Label.textContent = 'A2';
+
+        setsSection.after(a2Label);
+        a2Label.after(a2Section);
+      });
+    });
+
+    // ── Progression formatting ─────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.ai-progression').forEach(function(element) {
+        var content = element.textContent;
+        if (!content || content.trim() === '' || !content.includes('Set 1:')) return;
+
+        var lines = content.split('\n');
+        var performanceLines = [];
+        var adjustmentLine   = '';
+
+        lines.forEach(function(line) {
+          var trimmed = line.trim();
+          if (trimmed.startsWith('Set ')) {
+            performanceLines.push(trimmed);
+          } else if (trimmed && (
+            trimmed.includes('kg') || trimmed.includes('reps') ||
+            trimmed.includes('\u2191') || trimmed.includes('\u2193')
+          )) {
+            adjustmentLine = trimmed;
+          }
+        });
+
+        if (performanceLines.length === 0) return;
+
+        if (adjustmentLine) {
+          adjustmentLine = adjustmentLine
+            .replace('(arrow up)',   '\u2191')
+            .replace('(arrow down)', '\u2193')
+            .replace('arrow up',     '\u2191')
+            .replace('arrow down',   '\u2193');
+        }
+
+        element.innerHTML = '';
+
+        var perfDiv = document.createElement('div');
+        perfDiv.className = 'performance-data';
+        perfDiv.innerHTML = performanceLines.join('<br>');
+        element.appendChild(perfDiv);
+
+        if (adjustmentLine) {
+          var adjDiv = document.createElement('div');
+          adjDiv.className = 'adjustment';
+          if (adjustmentLine.includes('\u2191')) {
+            adjDiv.innerHTML = adjustmentLine.replace('\u2191', '<span class="arrow-up">\u2191</span>');
+          } else if (adjustmentLine.includes('\u2193')) {
+            adjDiv.innerHTML = adjustmentLine.replace('\u2193', '<span class="arrow-down">\u2193</span>');
+          } else {
+            adjDiv.textContent = adjustmentLine;
+          }
+          element.appendChild(adjDiv);
+        }
+      });
+
+      // Add loaded class for entry animations
+      document.body.classList.add('loaded');
+    });
+
+    // ── Chat ─────────────────────────────────────────────────────────────────
+    var chatOpen = false;
+    var chatHistory = [];
+    var chatBusy = false;
+    var liveProgram = null;
+
+    function toggleChat() {
+      chatOpen = !chatOpen;
+      document.getElementById('chat-panel').classList.toggle('open', chatOpen);
+      document.getElementById('chat-fab').style.display = chatOpen ? 'none' : '';
+      if (chatOpen) {
+        document.getElementById('chat-input').focus();
+        liveProgram = extractProgramFromDOM();
+      }
+    }
+
+    function extractProgramFromDOM() {
+      var prog = {};
+      var activePanel = document.querySelector('.week-panel.active');
+      if (!activePanel) return prog;
+      activePanel.querySelectorAll('.day-section').forEach(function(daySection) {
+        var dayName = daySection.querySelector('.day-name').textContent.trim();
+        prog[dayName] = [];
+        daySection.querySelectorAll('.exercise-card').forEach(function(card) {
+          var nameEl  = card.querySelector('.exercise-name');
+          var badgeEl = card.querySelector('.badge-sets');
+          var rirEl   = card.querySelector('.badge-rir');
+          var cuesEl  = card.querySelector('.ai-note-content');
+          var restEl  = card.querySelector('.rest-pill');
+          var techEl  = card.querySelector('.technique-badge');
+          var name     = nameEl   ? (nameEl.dataset.rawName || nameEl.textContent).trim()                 : '';
+          var setsReps = badgeEl  ? badgeEl.textContent.trim()                                            : '3 × 8-12';
+          var rirText  = rirEl    ? rirEl.textContent.replace('ⓘ','').replace('RIR','').replace(/\n.*$/s,'').trim() : '2';
+          var cues     = cuesEl   ? cuesEl.textContent.trim()                                             : '';
+          var rest     = restEl   ? restEl.textContent.replace('Rest:', '').trim()                        : '90 seconds';
+          var technique = techEl  ? techEl.textContent.trim()                                             : '';
+          var parts = setsReps.split('×');
+          var sets  = parseInt((parts[0] || '3').trim()) || 3;
+          var reps  = (parts[1] || '8-12').trim();
+          prog[dayName].push({ name: name, sets: sets, reps: reps, target_rir: rirText, cues: cues, rest: rest, technique: technique });
+        });
+      });
+      return prog;
+    }
+
+    function renderUpdatedProgram(updatedProgram) {
+      var activePanel = document.querySelector('.week-panel.active');
+      if (!activePanel) return;
+      activePanel.querySelectorAll('.day-section').forEach(function(daySection) {
+        var dayName = daySection.querySelector('.day-name').textContent.trim();
+        if (!updatedProgram[dayName]) return;
+        var cards  = daySection.querySelectorAll('.exercise-card');
+        var exList = updatedProgram[dayName];
+        cards.forEach(function(card, i) {
+          if (i >= exList.length) return;
+          var ex = exList[i];
+          var nameEl  = card.querySelector('.exercise-name');
+          var badgeEl = card.querySelector('.badge-sets');
+          var rirEl   = card.querySelector('.badge-rir');
+          var cuesEl  = card.querySelector('.ai-note-content');
+          var restEl  = card.querySelector('.rest-pill');
+          if (nameEl && ex.name) { nameEl.dataset.rawName = ex.name; nameEl.textContent = ex.name; }
+          if (badgeEl) badgeEl.textContent = (ex.sets || 3) + ' × ' + (ex.reps || '8-12');
+          // Also update visible metric blocks
+          var visSetEl = card.querySelector('.metric-sets .metric-val');
+          if (visSetEl) visSetEl.textContent = (ex.sets || 3) + '×' + (ex.reps || '8-12');
+          var visRirEl = card.querySelector('.metric-rir-visual .metric-val');
+          if (visRirEl) visRirEl.textContent = ex.target_rir || '2';
+          if (rirEl) {
+            rirEl.childNodes.forEach(function(n) {
+              if (n.nodeType === 3) n.textContent = ' RIR ' + (ex.target_rir || '2');
+            });
+          }
+          if (cuesEl) cuesEl.textContent = ex.cues || cuesEl.textContent;
+          if (restEl) restEl.textContent = 'Rest: ' + (ex.rest || restEl.textContent.replace('Rest:','').trim());
+          // Sync the intensity-technique badge: update, create, or remove it.
+          var techEl = card.querySelector('.technique-badge');
+          var newTech = (ex.technique || '').trim();
+          if (newTech) {
+            if (!techEl) {
+              var identity = card.querySelector('.card-identity');
+              if (identity) {
+                techEl = document.createElement('div');
+                techEl.className = 'technique-badge';
+                techEl.title = 'Intensity technique on the last set — see the coach note for how to perform it';
+                identity.appendChild(techEl);
+              }
+            }
+            if (techEl) techEl.textContent = newTech;
+          } else if (techEl) {
+            techEl.remove();
+          }
+        });
+        // Re-apply letter/superset formatting after name updates
+        applyExerciseLabels(daySection);
+        // Update day header exercise count
+        var metaNum = daySection.querySelector('.day-meta-num');
+        var metaLbl = daySection.querySelector('.day-meta-lbl');
+        if (metaNum) metaNum.textContent = exList.length;
+        if (metaLbl) metaLbl.textContent = 'Exercise' + (exList.length !== 1 ? 's' : '');
+      });
+      liveProgram = updatedProgram;
+    }
+
+    function appendChatMsg(text, role) {
+      var msgs = document.getElementById('chat-messages');
+      var div  = document.createElement('div');
+      div.className = 'chat-msg ' + (role === 'user' ? 'chat-msg-user' : role === 'edit' ? 'chat-msg-edit' : 'chat-msg-bot');
+      div.textContent = text;
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+      return div;
+    }
+
+    function showTyping() {
+      var msgs = document.getElementById('chat-messages');
+      var div  = document.createElement('div');
+      div.className = 'chat-typing';
+      div.id = 'chat-typing-indicator';
+      div.innerHTML = 'Coach is thinking <span class="typing-dots"><span></span><span></span><span></span></span>';
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function hideTyping() {
+      var el = document.getElementById('chat-typing-indicator');
+      if (el) el.remove();
+    }
+
+    function sendChatMessage() {
+      if (chatBusy) return;
+      var input   = document.getElementById('chat-input');
+      var message = input.value.trim();
+      if (!message) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+      appendChatMsg(message, 'user');
+      chatHistory.push({ role: 'user', parts: [{ text: message }] });
+
+      chatBusy = true;
+      document.getElementById('chat-send').disabled = true;
+      showTyping();
+
+      var currentProgram = liveProgram || extractProgramFromDOM();
+
+      fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          program: currentProgram,
+          history: chatHistory.slice(0, -1),
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        hideTyping();
+        if (data.error) {
+          appendChatMsg('Error: ' + data.error, 'bot');
+        } else {
+          if (data.function_results && data.function_results.length) {
+            data.function_results.forEach(function(r) { appendChatMsg('✓ ' + r, 'edit'); });
+          }
+          if (data.reply) {
+            appendChatMsg(data.reply, 'bot');
+            chatHistory.push({ role: 'model', parts: [{ text: data.reply }] });
+          }
+          if (data.updated_program) {
+            renderUpdatedProgram(data.updated_program);
+            showToast('Program updated by Coach', 'success');
+          }
+        }
+      })
+      .catch(function() {
+        hideTyping();
+        appendChatMsg('Network error. Please try again.', 'bot');
+      })
+      .finally(function() {
+        chatBusy = false;
+        document.getElementById('chat-send').disabled = false;
+      });
+    }
+
+    // Send on Enter (Shift+Enter for newline)
+    document.addEventListener('DOMContentLoaded', function() {
+      var chatInput = document.getElementById('chat-input');
+      chatInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendChatMessage();
+        }
+      });
+      chatInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 90) + 'px';
+      });
+    });
+
+  /* ---- Fast set-logging pill interactions ---- */
+  (function () {
+    function midpoint(target, { integer }) {
+      if (!target) return '';
+      const s = String(target).trim();
+      // Range like "8-12" or "2-3"
+      const m = s.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
+      if (m) {
+        const mid = (parseFloat(m[1]) + parseFloat(m[2])) / 2;
+        if (integer) return String(Math.round(mid));
+        return String(Math.round(mid * 2) / 2);   // 0.5 resolution
+      }
+      // Single number like "10" or "2"
+      if (/^\d+(?:\.\d+)?$/.test(s)) return s;
+      return '';
+    }
+
+    function hiddenInputFor(row, field) {
+      const name = `${row.dataset.week}_${row.dataset.day.replace(/ /g,'')}_ex${row.dataset.exerciseIndex}_set${row.dataset.setIndex}_${field}`;
+      return row.querySelector(`input[type=hidden][name="${name}"]`);
+    }
+
+    function updateConfirmEnabled(row) {
+      const btn = row.querySelector('.set-confirm');
+      if (!btn) return;
+      if (row.dataset.readonly === '1') return;
+      const kgVal = row.querySelector('.set-pill[data-field="weight"] .pill-value').textContent.trim();
+      btn.disabled = !kgVal;
+    }
+
+    function postLogSet(row) {
+      const payload = {
+        week: Number(row.dataset.week),
+        day: row.dataset.day,
+        exercise_index: Number(row.dataset.exerciseIndex),
+        set_index: Number(row.dataset.setIndex),
+        weight: hiddenInputFor(row, 'weight').value,
+        reps: hiddenInputFor(row, 'reps').value,
+        actual_rir: hiddenInputFor(row, 'actual_rir').value,
+      };
+      fetch('/log_set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => { /* fire-and-forget; form POST still works as fallback */ });
+    }
+
+    function commitPill(pill, value) {
+      const valSpan = pill.querySelector('.pill-value');
+      valSpan.textContent = value;
+      const row = pill.closest('.set-row');
+      const field = pill.dataset.field;
+      hiddenInputFor(row, field).value = value;
+      updateConfirmEnabled(row);
+    }
+
+    function openEditor(pill) {
+      if (pill.querySelector('input.pill-input')) return;
+      const row = pill.closest('.set-row');
+      if (row.dataset.readonly === '1') return;
+      const valSpan = pill.querySelector('.pill-value');
+      const current = valSpan.textContent.trim();
+      const field = pill.dataset.field;
+      const step = (field === 'reps') ? '1' : '0.5';
+      valSpan.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.inputMode = 'decimal';
+      input.step = step;
+      input.className = 'pill-input';
+      input.value = current;
+      pill.appendChild(input);
+      input.focus();
+      input.select();
+      const finish = () => {
+        const v = input.value.trim();
+        input.remove();
+        valSpan.style.display = '';
+        commitPill(pill, v);
+        // If this pill belonged to a confirmed row, mark row dirty again
+        if (row.classList.contains('done')) {
+          row.classList.remove('done');
+          row.querySelector('.set-confirm').disabled = !hiddenInputFor(row, 'weight').value;
+        }
+      };
+      input.addEventListener('blur', finish, { once: true });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+    }
+
+    function confirmRow(row) {
+      if (row.classList.contains('done')) {
+        // Undo
+        row.classList.remove('done');
+        updateConfirmEnabled(row);
+        return;
+      }
+      // If a pill is still in edit mode, commit it synchronously first.
+      const activeInput = row.querySelector('input.pill-input');
+      if (activeInput) activeInput.blur();
+      // Ensure hidden inputs are populated from current pill values
+      ['weight', 'reps', 'actual_rir'].forEach((f) => {
+        const v = row.querySelector(`.set-pill[data-field="${f}"] .pill-value`).textContent.trim();
+        hiddenInputFor(row, f).value = v;
+      });
+      row.classList.add('done');
+      postLogSet(row);
+      // Pulse the next unconfirmed ✓ in this exercise
+      let next = row.nextElementSibling;
+      while (next && (!next.classList.contains('set-row') || next.classList.contains('done'))) {
+        next = next.nextElementSibling;
+      }
+      if (next) {
+        const nextBtn = next.querySelector('.set-confirm');
+        if (nextBtn && !nextBtn.disabled) {
+          nextBtn.classList.remove('pulse');
+          void nextBtn.offsetWidth;   // restart animation
+          nextBtn.classList.add('pulse');
+          setTimeout(() => nextBtn.classList.remove('pulse'), 3000);
+        }
+      }
+    }
+
+    function initRow(row) {
+      const btn = row.querySelector('.set-confirm');
+      // Template renders ✓ with `disabled` attribute on past/future weeks — mirror to the row.
+      if (btn && btn.hasAttribute('disabled')) {
+        row.dataset.readonly = '1';
+      }
+      // Midpoint prefill for reps/rir (kg handled by server-side prior-week lookup)
+      const repsPill = row.querySelector('.set-pill[data-field="reps"]');
+      const rirPill  = row.querySelector('.set-pill[data-field="actual_rir"]');
+      const repsMid = midpoint(row.dataset.repsTarget, { integer: true });
+      const rirMid  = midpoint(row.dataset.rirTarget,  { integer: false });
+      if (repsMid) commitPill(repsPill, repsMid);
+      if (rirMid)  commitPill(rirPill,  rirMid);
+
+      // Kg hidden input already carries prior_weight from Jinja; sync confirm button state.
+      updateConfirmEnabled(row);
+
+      // Bind handlers
+      row.querySelectorAll('.set-pill').forEach((pill) => {
+        pill.addEventListener('click', (e) => {
+          if (row.dataset.readonly === '1') return;
+          if (e.target.tagName === 'INPUT') return;   // already editing
+          openEditor(pill);
+        });
+        if (row.dataset.readonly !== '1') {
+          pill.setAttribute('tabindex', '0');
+          pill.setAttribute('role', 'button');
+          pill.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pill.click(); }
+          });
+        }
+      });
+      if (btn) {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          confirmRow(row);
+        });
+      }
+    }
+
+    function initAll() {
+      document.querySelectorAll('.set-row').forEach(initRow);
+      document.querySelectorAll('.week-tab, .ai-note-toggle').forEach((el) => {
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'button');
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+        });
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAll);
+    } else {
+      initAll();
+    }
+  })();
+  </script>
+
+  <style>
+    #ms-list .ms-row { display:flex; align-items:flex-start; gap:11px; padding:6px 0; }
+    #ms-list .ms-ic { width:16px; height:16px; flex:0 0 16px; margin-top:2px; display:flex; align-items:center; justify-content:center; }
+    #ms-list .ms-dot { width:8px; height:8px; border-radius:50%; background:var(--border-mid); }
+    #ms-list .ms-spin { width:15px; height:15px; border:none; border-radius:50%; background:conic-gradient(from 0deg in oklch, #FFC24D, #FF9E2C, #FF6B2B, #FF4D6D, #E0468C, #FFC24D); -webkit-mask:radial-gradient(closest-side, transparent 60%, #000 62%); mask:radial-gradient(closest-side, transparent 60%, #000 62%); animation:msspin .9s linear infinite; }
+    @keyframes msspin { to { transform:rotate(360deg); } }
+    #ms-list .ms-check { color:var(--orange); font-size:.85rem; }
+    #ms-list .ms-label { font-size:.82rem; color:var(--text-muted); text-align:left; }
+    #ms-list .ms-row.done .ms-label { color:var(--text-muted); }
+    #ms-list .ms-row.active .ms-label { color:var(--text); font-weight:600; }
+    #ms-list .ms-row.pending .ms-label { color:var(--text-dim); }
+    #ms-list .ms-feed { margin-left:27px; }
+    #ms-list .ms-feed.collapsed { display:none; }
+    #ms-list .ms-why { font-family:'DM Mono',monospace; font-size:.68rem; color:var(--text-dim); line-height:1.5; padding:1px 0 1px 12px; position:relative; opacity:.5; text-align:left; }
+    #ms-list .ms-why::before { content:"·"; position:absolute; left:2px; color:var(--border-mid); }
+    #ms-list .ms-why.fresh { color:var(--text); opacity:1; }
+    #ms-list .ms-why.fresh::before { color:var(--orange); }
+  </style>
+  <!-- Review Overlay -->
+  <div id="review-overlay" style="display:none; position:fixed; inset:0; background:rgba(20,22,26,0.45); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:9999; overflow-y:auto; padding:2rem;">
+    <div style="max-width:700px; margin:2rem auto; background:var(--surface); border-radius:var(--r-lg); padding:2rem; border:1px solid var(--border); box-shadow:var(--shadow-lg);">
+      <h2 style="color:var(--orange); font-family:'Barlow Condensed',sans-serif; font-size:1.6rem; margin-bottom:1rem;" id="review-title">Program Review</h2>
+      <div id="review-reasoning" style="color:var(--text); font-family:'DM Sans',sans-serif; font-size:0.95rem; line-height:1.6; margin-bottom:1.5rem; padding:1rem; background:var(--surface2); border-radius:var(--r-md);"></div>
+      <div id="review-recommendations" style="margin-bottom:1.5rem;"></div>
+      <div style="display:flex; gap:1rem; justify-content:flex-end;">
+        <button type="button" id="review-skip-btn" class="btn btn-danger">Skip Review</button>
+        <button type="button" id="review-approve-btn" class="btn btn-primary btn-ai">Approve &amp; Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generation Progress Overlay -->
+  <div id="progress-overlay" style="display:none; position:fixed; inset:0; background:rgba(20,22,26,0.45); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:9998; overflow-y:auto;">
+    <div style="position:relative; max-width:520px; margin:10vh auto; background:var(--surface); border-radius:var(--r-lg); padding:2rem; border:1px solid var(--border); box-shadow:var(--shadow-lg); overflow:hidden;">
+      <div aria-hidden="true" style="position:absolute; left:-10%; right:-10%; top:-70%; height:210px; background:var(--grad-ai-wide); background-size:250% 100%; filter:blur(52px); opacity:0.30; animation:auroraFlow 10s linear infinite, auroraDrift 13s ease-in-out infinite; pointer-events:none;"></div>
+      <div aria-hidden="true" style="position:absolute; left:-15%; right:-5%; top:-45%; height:230px; background:linear-gradient(245deg,#E0468C,#FF4D6D,#FF6B2B,#FFC24D); background-size:250% 100%; filter:blur(62px); opacity:0.18; animation:auroraFlow 15s linear infinite reverse, auroraDrift 18s ease-in-out infinite alternate; pointer-events:none;"></div>
+      <h2 style="position:relative; font-family:'Barlow Condensed',sans-serif; font-size:1.4rem; margin-bottom:0.25rem; background:var(--grad-ai-wide); background-size:300% auto; -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent; animation:aiShift 6s linear infinite;">Building your program</h2>
+      <p id="progress-message" style="position:relative; color:var(--text-dim); font-family:'DM Mono',monospace; font-size:0.72rem; margin-bottom:1.25rem;">About a minute</p>
+      <div id="ms-list" style="position:relative;"></div>
+      <div style="position:relative; margin-top:1.25rem; width:100%; height:5px; background:var(--surface3); border-radius:2px; overflow:hidden;">
+        <div id="progress-bar" style="width:0%; height:100%; background:var(--grad-ai-wide); background-size:250% 100%; animation:auroraFlow 5s linear infinite; transition:width 0.4s;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var overlay = document.getElementById('review-overlay');
+    var titleEl = document.getElementById('review-title');
+    var reasoningEl = document.getElementById('review-reasoning');
+    var recsEl = document.getElementById('review-recommendations');
+    var approveBtn = document.getElementById('review-approve-btn');
+    var skipBtn = document.getElementById('review-skip-btn');
+    var progressOverlay = document.getElementById('progress-overlay');
+    var progressMsg = document.getElementById('progress-message');
+    var progressBar = document.getElementById('progress-bar');
+    var pendingJobId = null;
+
+    var MILESTONES = [], msIndex = {}, queues = {}, revealed = {};
+    var activeIdx = -1, targetIdx = -1, revealTimer = null;
+    var REVEAL_MS = 650;
+    var msList = document.getElementById('ms-list');
+
+    function renderPlan(plan) {
+      MILESTONES = plan || []; msIndex = {}; queues = {}; revealed = {};
+      activeIdx = -1; targetIdx = -1;
+      msList.innerHTML = '';
+      MILESTONES.forEach(function(m, i) {
+        msIndex[m.key] = i; queues[m.key] = []; revealed[m.key] = [];
+        var row = document.createElement('div');
+        row.className = 'ms-row pending'; row.id = 'ms-' + m.key;
+        row.innerHTML =
+          '<div class="ms-ic"><span class="ms-dot"></span></div>'
+          + '<div style="flex:1;"><div class="ms-label">' + m.label + '</div>'
+          + '<div class="ms-feed collapsed" id="why-' + m.key + '"></div></div>';
+        msList.appendChild(row);
+      });
+      ensureTimer();
+    }
+
+    function setIcon(key, kind) {
+      var ic = document.querySelector('#ms-' + key + ' .ms-ic');
+      if (!ic) return;
+      ic.innerHTML = kind === 'done' ? '<span class="ms-check">✓</span>'
+        : kind === 'active' ? '<span class="ms-spin"></span>'
+        : '<span class="ms-dot"></span>';
+    }
+
+    function applyStates() {
+      for (var i = 0; i < MILESTONES.length; i++) {
+        var key = MILESTONES[i].key;
+        var row = document.getElementById('ms-' + key);
+        var feed = document.getElementById('why-' + key);
+        if (i < activeIdx)        { row.className = 'ms-row done';   setIcon(key, 'done');   feed.classList.add('collapsed'); }
+        else if (i === activeIdx) { row.className = 'ms-row active'; setIcon(key, 'active'); feed.classList.remove('collapsed'); }
+        else                      { row.className = 'ms-row pending'; setIcon(key, 'pending'); }
+      }
+      var done = Math.max(activeIdx, 0);
+      var pct = MILESTONES.length ? Math.min(Math.round(done / MILESTONES.length * 100), 95) : 0;
+      progressBar.style.width = pct + '%';
+    }
+
+    function renderFeed(key) {
+      var feed = document.getElementById('why-' + key);
+      if (!feed) return;
+      var shown = revealed[key].slice(-3);
+      feed.innerHTML = '';
+      shown.forEach(function(txt, idx) {
+        var line = document.createElement('div');
+        line.className = 'ms-why' + (idx === shown.length - 1 ? ' fresh' : '');
+        line.textContent = txt;
+        feed.appendChild(line);
+      });
+    }
+
+    function tick() {
+      if (activeIdx < 0 && targetIdx >= 0) { activeIdx = 0; applyStates(); }
+      if (activeIdx < 0 || !MILESTONES[activeIdx]) return;
+      var key = MILESTONES[activeIdx].key;
+      if (queues[key] && queues[key].length) { revealed[key].push(queues[key].shift()); renderFeed(key); return; }
+      if (activeIdx < targetIdx) { activeIdx++; applyStates(); }
+    }
+
+    function ensureTimer() { if (!revealTimer) revealTimer = setInterval(tick, REVEAL_MS); }
+
+    function handleMsg(msg) {
+      if (msg.milestones) { renderPlan(msg.milestones); return; }
+      if (msg.milestone && msIndex.hasOwnProperty(msg.milestone)) {
+        var i = msIndex[msg.milestone];
+        if (i > targetIdx) targetIdx = i;
+        if (activeIdx < 0) { activeIdx = 0; applyStates(); }
+        if (msg.reason) queues[msg.milestone].push(msg.reason);
+      }
+    }
+
+    function completeMs() {
+      if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+      for (var i = 0; i < MILESTONES.length; i++) setIcon(MILESTONES[i].key, 'done');
+      progressBar.style.width = '100%';
+    }
+
+    function showProgress(msg) {
+      progressOverlay.style.display = 'block';
+      progressMsg.textContent = msg || 'Processing...';
+    }
+
+    function hideProgress() {
+      progressOverlay.style.display = 'none';
+      if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+      progressBar.style.width = '0%';
+    }
+
+    function showReview(data) {
+      hideProgress();
+      var decision = data.analyst_decision || {};
+      var analytics = data.analytics || {};
+      var reviewType = decision.review_type || analytics.review_type || 'review';
+
+      titleEl.textContent = reviewType === 'deload'
+        ? 'Deload Week Recommended'
+        : 'Mesocycle Review \u2014 End of Block';
+
+      reasoningEl.textContent = decision.reasoning || 'No detailed reasoning provided.';
+
+      recsEl.innerHTML = '';
+      var recs = decision.recommendations || [];
+      if (recs.length > 0) {
+        var heading = document.createElement('h3');
+        heading.textContent = 'Proposed Changes';
+        heading.style.cssText = "color:var(--orange); font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; margin-bottom:0.75rem;";
+        recsEl.appendChild(heading);
+
+        recs.forEach(function(rec) {
+          var div = document.createElement('div');
+          div.style.cssText = "padding:0.75rem 1rem; background:var(--surface); border-radius:var(--r-md); margin-bottom:0.5rem; border-left:3px solid var(--orange);";
+          if (rec.type === 'swap') {
+            div.innerHTML = '<span style="color:var(--blue); font-family:\'DM Mono\',monospace;">' + rec.exercise + '</span>'
+              + ' \u2192 <span style="color:var(--blue); font-family:\'DM Mono\',monospace;">' + rec.replacement + '</span>'
+              + '<br><span style="color:var(--text-muted); font-size:0.85rem;">' + rec.reason + '</span>';
+          } else if (rec.type === 'adjust_volume') {
+            div.innerHTML = '<span style="color:var(--blue); font-family:\'DM Mono\',monospace;">' + rec.movement_pattern + '</span>'
+              + ': ' + rec.change
+              + '<br><span style="color:var(--text-muted); font-size:0.85rem;">' + rec.reason + '</span>';
+          }
+          recsEl.appendChild(div);
+        });
+      }
+
+      if (decision.deload) {
+        var deloadDiv = document.createElement('div');
+        deloadDiv.style.cssText = "padding:1rem; background:var(--surface); border-radius:var(--r-md); margin-bottom:0.5rem;";
+        deloadDiv.innerHTML = '<span style="color:var(--orange); font-weight:600;">Deload Plan:</span> '
+          + 'Reduce volume by ~' + Math.round((decision.deload.volume_reduction || 0.5) * 100) + '%, '
+          + 'intensity: ' + (decision.deload.intensity || 'moderate');
+        recsEl.appendChild(deloadDiv);
+      }
+
+      pendingJobId = data.job_id;
+      overlay.style.display = 'block';
+    }
+
+    function listenToStream(jobId) {
+      var es = new EventSource('/generate/stream/' + jobId);
+      es.onmessage = function(e) {
+        var msg = JSON.parse(e.data);
+        if (msg.step === 'review') {
+          es.close();
+          showReview(msg);
+        } else if (msg.step === 'done') {
+          es.close();
+          completeMs();
+          window.location.href = '/next_week/complete/' + msg.job_id;
+        } else if (msg.step === 'error' || msg.step === 'timeout') {
+          es.close();
+          hideProgress();
+          alert('Error: ' + msg.message);
+        } else {
+          handleMsg(msg);
+        }
+      };
+      es.onerror = function() { es.close(); hideProgress(); };
+    }
+
+    approveBtn.addEventListener('click', function() {
+      if (!pendingJobId) return;
+      overlay.style.display = 'none';
+      approveBtn.disabled = true;
+      showProgress('Generating program based on approved changes...');
+
+      fetch('/approve_review', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({job_id: pendingJobId})
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.job_id) {
+          listenToStream(data.job_id);
+        }
+        approveBtn.disabled = false;
+      })
+      .catch(function(err) {
+        hideProgress();
+        approveBtn.disabled = false;
+        alert('Approve failed: ' + err.message);
+      });
+    });
+
+    skipBtn.addEventListener('click', function() {
+      overlay.style.display = 'none';
+      pendingJobId = null;
+    });
+
+    // Intercept the training form submit to use SSE
+    var trainingForm = document.getElementById('training-form');
+    if (trainingForm) {
+      trainingForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        showProgress('Analyzing training history...');
+        var formData = new FormData(trainingForm);
+
+        fetch('/next_week', {
+          method: 'POST',
+          body: formData,
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.job_id) {
+            listenToStream(data.job_id);
+          } else {
+            hideProgress();
+            alert('Failed to start generation');
+          }
+        })
+        .catch(function(err) {
+          hideProgress();
+          alert('Error: ' + err.message);
+        });
+      });
+    }
+  })();
+  </script>
+</body>
+</html>

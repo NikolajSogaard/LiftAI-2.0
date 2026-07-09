@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LiftAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* "Dark Aurora" — Gemini-style dark; the AI is a living blue→violet→cyan spectrum (same token names) */
+      --bg:          #0E0F1A;
+      --surface:     #15172A;
+      --surface2:    #1B1E33;
+      --surface3:    #242843;
+      --border:      #262A42;
+      --border-mid:  #353A5C;
+      --text:        #ECEEF6;
+      --text-muted:  #A2A9C0;
+      --text-dim:    #818AA4;   /* AA-safe on dark surfaces */
+      --orange:      #FF6B2B;
+      --orange-dim:  rgba(255,107,43,0.12);
+      --orange-glow: rgba(255,107,43,0.34);
+      --ember-bright:#FFB347;
+      --ember-deep:  #E8453C;
+      --ember-line:  rgba(255,107,43,0.32);
+      --steel:       #EFA94A;
+      --steel-line:  rgba(239,169,74,0.32);
+      --steel-dim:   rgba(239,169,74,0.13);
+      --green:       #34D399;
+      --green-dim:   rgba(52,211,153,0.13);
+      --red:         #F87171;
+      --red-dim:     rgba(248,113,113,0.13);
+      --grad-ember:  linear-gradient(135deg, #FF9E2C, #FF4D6D);
+      --grad-heat:   linear-gradient(90deg, #FFB347, #FF6B2B 55%, #FF4D6D);
+      /* the AI spectrum — Gemini-style, used as accent + animated while generating.
+         OKLCH interpolation keeps every transition vivid (no muddy sRGB midpoints).
+         -wide is the looping track: stops are spaced by hue distance so the scroll
+         runs at constant perceptual speed and the amber→indigo wrap is seamless,
+         not a fast smear. */
+      --grad-ai:     linear-gradient(90deg in oklch, #FFC24D, #FF9E2C, #FF6B2B, #FF4D6D, #E0468C);
+      --grad-ai-wide:linear-gradient(90deg in oklch, #FFC24D 0%, #FF9E2C 16%, #FF6B2B 36%, #FF4D6D 58%, #E0468C 78%, #FFC24D 100%);
+      --forged:      #FFFFFF;
+      --shadow-sm:   0 1px 2px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.24);
+      --shadow-md:   0 8px 24px -8px rgba(0,0,0,0.50);
+      --shadow-lg:   0 22px 56px -18px rgba(0,0,0,0.62);
+      --r-sm:        7px;
+      --r-md:        11px;
+      --r-lg:        16px;
+      --pill:        999px;
+      --fs-label:    0.6rem;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Dark Aurora: animated gradient background (Gemini-style) ── */
+    .aurora-bg {
+      position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+      background:
+        radial-gradient(58vw 42vw at 50% 116%, rgba(255,158,44,0.12), transparent 60%),
+        var(--bg);
+    }
+    .aurora-bg::before, .aurora-bg::after {
+      content: ''; position: absolute; border-radius: 50%;
+      filter: blur(90px); opacity: 0.5; mix-blend-mode: screen;
+    }
+    .aurora-bg::before {
+      width: 56vw; height: 56vw; left: -12vw; top: -16vw;
+      background: radial-gradient(circle, #FF7A3D, transparent 62%);
+      animation: auroraBgDrift 24s ease-in-out infinite;
+    }
+    .aurora-bg::after {
+      width: 50vw; height: 50vw; right: -12vw; top: -8vw;
+      background: radial-gradient(circle, #E0468C, transparent 62%);
+      animation: auroraBgDrift 30s ease-in-out infinite reverse;
+    }
+    @keyframes auroraBgDrift {
+      0%   { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+      50%  { transform: translate3d( 4%,  3%, 0) scale(1.15); }
+      100% { transform: translate3d(-2%,  2%, 0) scale(1.05); }
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      opacity: 0;
+    }
+    body.loaded { opacity: 1; transition: opacity 0.18s ease; }
+
+    /* ── Main layout ── */
+    .main {
+      max-width: 680px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 56px 20px 80px;
+    }
+
+    /* ── Logo block ── */
+    .logo-block {
+      text-align: center;
+      margin-bottom: 44px;
+      opacity: 0;
+    }
+    body.loaded .logo-block {
+      animation: slideDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+    }
+
+    .logo-lockup {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 4.2rem;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+    .logo-lift { color: var(--text); }
+    .logo-ai   {
+      background: var(--grad-ai-wide);
+      background-size: 300% auto;
+      -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+      animation: aiShift 9s linear infinite;
+    }
+
+    /* the rule reads as a minimalist barbell: spectrum bar + ink plates at each end */
+    .logo-rule {
+      position: relative;
+      width: 78px;
+      height: 4px;
+      background: var(--grad-ai-wide);
+      background-size: 300% auto;
+      border-radius: var(--pill);
+      margin: 16px auto 13px;
+      animation: aiShift 9s linear infinite;
+    }
+    .logo-rule::before, .logo-rule::after {
+      content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+      width: 4px; height: 15px; border-radius: 2px; background: var(--text);
+    }
+    .logo-rule::before { left: 9px;  box-shadow: 7px 0 0 var(--text); }
+    .logo-rule::after  { right: 9px; box-shadow: -7px 0 0 var(--text); }
+
+    .logo-sub {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 3.5px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    /* ── Progress panel (the "AI is running" moment) ── */
+    .progress-panel {
+      display: none;
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-md);
+      padding: 22px 24px;
+      margin-bottom: 28px;
+      overflow: hidden;
+      animation: fadeUp 0.35s ease;
+    }
+    .progress-panel.visible { display: block; }
+    /* flowing aurora glow behind the panel while generating — two counter-moving layers */
+    .progress-panel::before {
+      content: '';
+      position: absolute; left: -10%; right: -10%; top: -60%; height: 210px;
+      background: var(--grad-ai-wide);
+      background-size: 250% 100%;
+      filter: blur(52px); opacity: 0.28;
+      animation: auroraFlow 10s linear infinite, auroraDrift 13s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .progress-panel::after {
+      content: '';
+      position: absolute; left: -15%; right: -5%; top: -42%; height: 230px;
+      background: linear-gradient(245deg, #E0468C, #FF4D6D, #FF6B2B, #FFC24D);
+      background-size: 250% 100%;
+      filter: blur(62px); opacity: 0.18;
+      animation: auroraFlow 15s linear infinite reverse, auroraDrift 18s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    .gen-header, .progress-steps, .gen-bar-track { position: relative; z-index: 1; }
+
+    .gen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+    }
+    .gen-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .gen-counter {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.9rem;
+      font-weight: 500;
+      background: var(--grad-ai-wide); background-size: 300% auto;
+      -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+      animation: aiShift 6s linear infinite;
+      line-height: 1;
+    }
+
+    .gen-bar-track {
+      height: 4px;
+      background: var(--surface3);
+      border-radius: 2px;
+      margin-bottom: 28px;
+      overflow: hidden;
+      position: relative;
+    }
+    .gen-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--grad-ai-wide);
+      background-size: 250% 100%;
+      animation: auroraFlow 5s linear infinite;
+      border-radius: 2px;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .gen-bar-scan {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 80px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: barScan 1.8s linear infinite;
+      display: none;
+    }
+    .progress-panel.visible .gen-bar-scan { display: block; }
+
+    @keyframes barScan {
+      from { left: -80px; }
+      to   { left: 100%; }
+    }
+
+    /* AI spectrum motion — continuous one-direction flow (fluid, no ping-pong) */
+    @keyframes auroraFlow {
+      from { background-position:   0% 50%; }
+      to   { background-position: 250% 50%; }
+    }
+    @keyframes aiShift {
+      from { background-position:    0% 50%; }
+      to   { background-position: -300% 50%; }
+    }
+    /* organic drift so the aurora breathes rather than just sliding */
+    @keyframes auroraDrift {
+      0%   { transform: translate3d(-3%, -2%, 0) scale(1.06); }
+      50%  { transform: translate3d( 3%,  3%, 0) scale(1.14); }
+      100% { transform: translate3d(-2%,  2%, 0) scale(1.06); }
+    }
+
+    /* Steps */
+    .progress-steps { display: flex; flex-direction: column; }
+
+    /* Milestone timeline (clean small-dot rows — matches the approved mockup) */
+    .ms-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+    }
+    .ms-ic {
+      width: 18px; height: 18px;
+      flex: 0 0 18px;
+      margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ms-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-mid); }
+    .ms-check { color: var(--orange); font-size: 1rem; font-weight: 700; }
+
+    @keyframes msspin { to { transform: rotate(360deg); } }
+    .ms-spin {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg in oklch, #FFC24D, #FF9E2C, #FF6B2B, #FF4D6D, #E0468C, #FFC24D);
+      -webkit-mask: radial-gradient(closest-side, transparent 60%, #000 62%);
+      mask: radial-gradient(closest-side, transparent 60%, #000 62%);
+      animation: msspin 0.9s linear infinite;
+    }
+
+    .ms-label { font-size: 0.95rem; color: var(--text-muted); transition: color 0.25s; }
+    .ms-row.done    .ms-label { color: var(--text-muted); }
+    .ms-row.active  .ms-label { color: var(--text); font-weight: 600; }
+    .ms-row.pending .ms-label { color: var(--text-dim); }
+
+    .ms-feed { margin-top: 4px; display: flex; flex-direction: column; gap: 1px; }
+    .ms-feed.collapsed { display: none; }
+    .ms-why {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      line-height: 1.55;
+      padding: 1px 0 1px 14px;
+      position: relative;
+      opacity: 0.5;
+      animation: fadeUp 0.3s ease both;
+    }
+    .ms-why::before { content: "·"; position: absolute; left: 3px; color: var(--border-mid); }
+    .ms-why.fresh { color: var(--text); opacity: 1; }
+    .ms-why.fresh::before { color: var(--orange); }
+
+    /* ── Error card ── */
+    .error-card {
+      display: none;
+      background: var(--red-dim);
+      border: 1px solid rgba(248,113,113,0.3);
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-sm);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      align-items: center;
+      gap: 14px;
+    }
+    .error-card.visible { display: flex; }
+    .error-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .error-body { flex: 1; }
+    .error-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--red);
+      margin-bottom: 3px;
+    }
+    .error-msg { font-size: 0.78rem; color: var(--text-muted); }
+    .btn-retry {
+      background: transparent;
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 8px 16px;
+      border-radius: 5px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-retry:hover { background: var(--red-dim); }
+
+    /* ── Form card ── */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      opacity: 0;
+    }
+    body.loaded .form-card {
+      animation: slideDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.14s both;
+    }
+
+    .form-section { padding: 22px 24px; border-bottom: 1px solid var(--border); }
+    .form-section:last-child { border-bottom: none; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .section-number {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--orange);
+      flex-shrink: 0;
+      width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--ember-line);
+      border-radius: 50%;
+      background: var(--orange-dim);
+    }
+    .section-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--orange);
+      flex-shrink: 0;
+    }
+    .section-rule {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .form-section.has-error { box-shadow: inset 3px 0 var(--red); }
+    .section-error {
+      display: none;
+      color: var(--red);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      margin-top: 8px;
+    }
+    .form-section.has-error .section-error { display: block; }
+    .btn-generate:focus-visible,
+    .btn-load:focus-visible,
+    .btn-retry:focus-visible,
+    .persona-select:focus-visible,
+    .form-input:focus-visible,
+    .program-item:focus-visible {
+      outline: 2px solid var(--orange);
+      outline-offset: 2px;
+    }
+    .pill-group input:focus-visible + label,
+    .stepper-group input:focus-visible + label {
+      outline: 2px solid var(--orange);
+      outline-offset: 2px;
+    }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .form-group { display: flex; flex-direction: column; gap: 7px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.67rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+    }
+
+    /* Square token groups */
+    .pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill-group input[type="radio"],
+    .pill-group input[type="checkbox"] { display: none; }
+    .pill-group label {
+      padding: 7px 15px;
+      border-radius: var(--pill);
+      border: 1px solid var(--border-mid);
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .pill-group label:hover { border-color: var(--orange); color: var(--text); }
+    .pill-group input:checked + label {
+      background: var(--orange-dim);
+      border-color: var(--orange);
+      color: var(--orange);
+      font-weight: 600;
+    }
+
+    /* Days per week stepper */
+    .stepper-group { display: flex; gap: 5px; }
+    .stepper-group input[type="radio"] { display: none; }
+    .stepper-group label {
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 4px;
+      border: 1px solid var(--border-mid);
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .stepper-group label:hover { border-color: var(--orange); color: var(--text); }
+    .stepper-group input:checked + label {
+      background: var(--grad-ember);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 2px 10px var(--orange-glow);
+    }
+
+    /* Text inputs */
+    .form-input {
+      width: 100%;
+      padding: 9px 13px;
+      border: 1px solid var(--border-mid);
+      border-radius: 6px;
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: var(--orange); }
+    .form-input::placeholder { color: var(--text-muted); }
+    textarea.form-input { resize: vertical; min-height: 64px; line-height: 1.5; }
+
+    /* Form footer */
+    .form-footer {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 18px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+      gap: 12px;
+    }
+    .persona-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      opacity: 0.6;
+      order: 2;
+      transition: opacity 0.2s;
+    }
+    .persona-wrapper:hover, .persona-wrapper:focus-within { opacity: 1; }
+    .persona-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .persona-select {
+      background: var(--surface);
+      border: 1px solid var(--border-mid);
+      color: var(--text);
+      padding: 7px 11px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+      cursor: pointer;
+    }
+    .persona-select:focus { border-color: var(--orange); }
+
+    .btn-generate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: var(--grad-ai);
+      background-size: 180% auto;
+      color: #fff;
+      border: none;
+      padding: 15px 26px;
+      border-radius: var(--r-md);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(255,107,43,0.34);
+      transition: background-position 0.4s, filter 0.2s, box-shadow 0.2s, transform 0.1s;
+    }
+    .btn-generate:hover {
+      background-position: right center;
+      filter: brightness(1.04);
+      box-shadow: 0 6px 26px rgba(255,107,43,0.44);
+    }
+    .btn-generate:active { transform: scale(0.97); }
+    .btn-generate:disabled {
+      background: var(--surface3);
+      color: var(--text-dim);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn-generate svg { flex-shrink: 0; }
+
+    /* ── Saved programs section ── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 36px 0;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.64rem;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      opacity: 0;
+    }
+    body.loaded .divider {
+      animation: slideDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    .saved-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-md);
+      padding: 20px;
+      opacity: 0;
+    }
+    body.loaded .saved-section {
+      animation: slideDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+    }
+
+    .saved-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .program-list { max-height: 210px; overflow-y: auto; margin-bottom: 12px; }
+    .program-list::-webkit-scrollbar { width: 3px; }
+    .program-list::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+    .program-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s, border-left-color 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .program-item:first-child { border-top: 1px solid var(--border); }
+    .program-item:hover { background: var(--surface2); border-left-color: var(--border-mid); }
+    .program-item.selected {
+      background: var(--orange-dim);
+      border-left-color: var(--orange);
+    }
+    .program-item strong {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      display: block;
+    }
+    .program-details {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.67rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .btn-load {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border-mid);
+      padding: 8px 18px;
+      border-radius: 4px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-load:not(:disabled):hover {
+      background: var(--orange-dim);
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+    .btn-load:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #load-message {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      display: none;
+    }
+    .msg-success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(70,217,138,0.28); }
+    .msg-error   { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(242,100,88,0.28); }
+    .empty-state { text-align: center; color: var(--text-dim); padding: 24px; font-family: 'DM Mono', monospace; font-size: 0.78rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 20px 24px;
+      font-size: 0.71rem;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+      font-family: 'DM Sans', sans-serif;
+      margin-top: 20px;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Reduced motion ──────────────────────────────────────────────────────
+       Honor the OS "reduce motion" preference: collapse decorative entrance,
+       scan and spin animations to their end state (entrance keyframes use
+       `both` fill, so content lands visible) while leaving focus/hover colour
+       feedback intact. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 540px) {
+      .main { padding: 32px 14px 60px; }
+      .logo-lockup { font-size: 3rem; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-group.full { grid-column: 1; }
+      .form-footer { flex-direction: column; align-items: stretch; }
+      .btn-generate { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="aurora-bg" aria-hidden="true"></div>
+
+<div class="main">
+
+  <!-- Logo -->
+  <div class="logo-block" id="logo-block">
+    <div class="logo-lockup">
+      <span class="logo-lift">LIFT</span><span class="logo-ai">AI</span>
+    </div>
+    <div class="logo-rule"></div>
+    <div class="logo-sub">AI-Powered Strength Training</div>
+  </div>
+
+  <!-- Progress panel (shown while generating) -->
+  <div class="progress-panel" id="progress-panel" role="status" aria-live="polite">
+    <div class="gen-header">
+      <div class="gen-title">Generating Program</div>
+      <div class="gen-counter" id="progress-fraction">0 / 0</div>
+    </div>
+    <div class="gen-bar-track">
+      <div class="gen-bar-fill" id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+      <div class="gen-bar-scan"></div>
+    </div>
+    <div class="progress-steps" id="milestone-list"></div>
+  </div>
+
+  <!-- Error card -->
+  <div class="error-card" id="error-card" role="alert" aria-live="assertive">
+    <div class="error-icon">⚠️</div>
+    <div class="error-body">
+      <div class="error-title">Generation Failed</div>
+      <div class="error-msg" id="error-msg">The coach couldn't finish your program — your answers are saved. Try again.</div>
+    </div>
+    <button type="button" class="btn-retry" id="btn-retry">Try Again</button>
+  </div>
+
+  <!-- Form -->
+  <form class="form-card" id="form-card">
+
+    <!-- 01 About You -->
+    <div class="form-section">
+      <div class="section-header">
+        <span class="section-number">01</span>
+        <span class="section-label">About You</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <span class="form-label">Experience Level</span>
+          <div class="pill-group">
+            <input type="radio" name="experience" id="exp-beginner" value="Beginner">
+            <label for="exp-beginner">Beginner</label>
+            <input type="radio" name="experience" id="exp-intermediate" value="Intermediate" checked>
+            <label for="exp-intermediate">Intermediate</label>
+            <input type="radio" name="experience" id="exp-advanced" value="Advanced">
+            <label for="exp-advanced">Advanced</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Primary Goal</span>
+          <div class="pill-group">
+            <input type="radio" name="goal" id="goal-strength" value="Strength">
+            <label for="goal-strength">Strength</label>
+            <input type="radio" name="goal" id="goal-hypertrophy" value="Hypertrophy" checked>
+            <label for="goal-hypertrophy">Hypertrophy</label>
+            <input type="radio" name="goal" id="goal-both" value="Strength & Hypertrophy">
+            <label for="goal-both">Both</label>
+            <input type="radio" name="goal" id="goal-general" value="General Fitness">
+            <label for="goal-general">General Fitness</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 02 Schedule -->
+    <div class="form-section">
+      <div class="section-header">
+        <span class="section-number">02</span>
+        <span class="section-label">Schedule</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <span class="form-label">Days Per Week</span>
+          <div class="stepper-group">
+            <input type="radio" name="days_per_week" id="dpw-1" value="1"><label for="dpw-1">1</label>
+            <input type="radio" name="days_per_week" id="dpw-2" value="2"><label for="dpw-2">2</label>
+            <input type="radio" name="days_per_week" id="dpw-3" value="3"><label for="dpw-3">3</label>
+            <input type="radio" name="days_per_week" id="dpw-4" value="4" checked><label for="dpw-4">4</label>
+            <input type="radio" name="days_per_week" id="dpw-5" value="5"><label for="dpw-5">5</label>
+            <input type="radio" name="days_per_week" id="dpw-6" value="6"><label for="dpw-6">6</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Training Days</span>
+          <div class="pill-group">
+            <input type="checkbox" name="days" id="day-mon" value="Monday" checked><label for="day-mon">Mon</label>
+            <input type="checkbox" name="days" id="day-tue" value="Tuesday" checked><label for="day-tue">Tue</label>
+            <input type="checkbox" name="days" id="day-wed" value="Wednesday"><label for="day-wed">Wed</label>
+            <input type="checkbox" name="days" id="day-thu" value="Thursday" checked><label for="day-thu">Thu</label>
+            <input type="checkbox" name="days" id="day-fri" value="Friday" checked><label for="day-fri">Fri</label>
+            <input type="checkbox" name="days" id="day-sat" value="Saturday"><label for="day-sat">Sat</label>
+            <input type="checkbox" name="days" id="day-sun" value="Sunday"><label for="day-sun">Sun</label>
+          </div>
+        </div>
+      </div>
+      <div class="section-error" id="err-schedule">Select at least one training day.</div>
+    </div>
+
+    <!-- 03 Equipment -->
+    <div class="form-section">
+      <div class="section-header">
+        <span class="section-number">03</span>
+        <span class="section-label">Equipment</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="pill-group">
+        <input type="checkbox" name="equipment" id="eq-barbell" value="Barbell & Plates" checked><label for="eq-barbell">Barbell &amp; Plates</label>
+        <input type="checkbox" name="equipment" id="eq-dumbbells" value="Dumbbells" checked><label for="eq-dumbbells">Dumbbells</label>
+        <input type="checkbox" name="equipment" id="eq-cables" value="Cables & Machines" checked><label for="eq-cables">Cables &amp; Machines</label>
+        <input type="checkbox" name="equipment" id="eq-pullup" value="Pull-up Bar" checked><label for="eq-pullup">Pull-up Bar</label>
+        <input type="checkbox" name="equipment" id="eq-bands" value="Resistance Bands"><label for="eq-bands">Resistance Bands</label>
+        <input type="checkbox" name="equipment" id="eq-bodyweight" value="Bodyweight Only"><label for="eq-bodyweight">Bodyweight Only</label>
+      </div>
+      <div class="section-error" id="err-equipment">Select at least one equipment option.</div>
+    </div>
+
+    <!-- 04 Session Length -->
+    <div class="form-section">
+      <div class="section-header">
+        <span class="section-number">04</span>
+        <span class="section-label">Session Length</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="pill-group">
+        <input type="radio" name="duration" id="dur-30" value="30"><label for="dur-30">30 min</label>
+        <input type="radio" name="duration" id="dur-45" value="45"><label for="dur-45">45 min</label>
+        <input type="radio" name="duration" id="dur-60" value="60" checked><label for="dur-60">60 min</label>
+        <input type="radio" name="duration" id="dur-75" value="75"><label for="dur-75">75 min</label>
+        <input type="radio" name="duration" id="dur-90" value="90"><label for="dur-90">90 min</label>
+        <input type="radio" name="duration" id="dur-unlimited" value="unlimited"><label for="dur-unlimited">No limit</label>
+      </div>
+    </div>
+
+    <!-- 05 Details -->
+    <div class="form-section">
+      <div class="section-header">
+        <span class="section-number">05</span>
+        <span class="section-label">Details</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <span class="form-label">Main Lifts <span style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></span>
+          <input type="text" id="main-lifts" class="form-input" placeholder="e.g. Squat, Bench Press, Deadlift">
+        </div>
+        <div class="form-group">
+          <span class="form-label">Injuries / Limitations <span style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></span>
+          <input type="text" id="injuries" class="form-input" placeholder="e.g. Lower back sensitivity">
+        </div>
+        <div class="form-group full">
+          <span class="form-label">Additional Notes <span style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></span>
+          <textarea id="extra-notes" class="form-input" placeholder="e.g. Home gym, prefer compound movements, morning sessions…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="form-footer">
+      <div class="persona-wrapper">
+        <span class="persona-label">Test Persona</span>
+        <select class="persona-select" id="persona-select">
+          <option value="">None</option>
+          <option value="1">Persona 1 — Busy Beginner</option>
+          <option value="2">Persona 2 — Bodybuilder</option>
+          <option value="3">Persona 3 — Powerlifter</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-generate" id="btn-generate">
+        Generate Program
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 7.5H12M12 7.5L8.5 4M12 7.5L8.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <div class="divider">or load a saved program</div>
+
+  <div class="saved-section">
+    <div class="saved-title">Saved Programs</div>
+    <div id="program-list" class="program-list"><div class="empty-state">Loading…</div></div>
+    <button type="button" class="btn-load" id="load-program-btn" disabled>Load Selected</button>
+    <div id="load-message"></div>
+  </div>
+
+</div>
+
+<footer>LiftAI &mdash; AI-Powered Strength Training</footer>
+
+<script>
+  var MILESTONES = [], msIndex = {}, queues = {}, revealed = {};
+  var activeIdx = -1, targetIdx = -1, revealTimer = null;
+  var REVEAL_MS = 650;
+
+  function setIcon(key, kind) {
+    var ic = document.querySelector('#ms-' + key + ' .ms-ic');
+    if (!ic) return;
+    ic.innerHTML = kind === 'done' ? '<span class="ms-check">✓</span>'
+      : kind === 'active' ? '<span class="ms-spin"></span>'
+      : '<span class="ms-dot"></span>';
+  }
+
+  function renderPlan(plan) {
+    MILESTONES = plan || [];
+    msIndex = {}; queues = {}; revealed = {};
+    activeIdx = -1; targetIdx = -1;
+    var list = document.getElementById('milestone-list');
+    list.innerHTML = '';
+    MILESTONES.forEach(function(m, i) {
+      msIndex[m.key] = i; queues[m.key] = []; revealed[m.key] = [];
+      var item = document.createElement('div');
+      item.className = 'ms-row pending';
+      item.id = 'ms-' + m.key;
+      item.innerHTML =
+        '<div class="ms-ic"><span class="ms-dot"></span></div>'
+        + '<div style="flex:1;min-width:0;"><div class="ms-label">' + m.label + '</div>'
+        + '<div class="ms-feed collapsed" id="why-' + m.key + '"></div></div>';
+      list.appendChild(item);
+    });
+    document.getElementById('progress-fraction').textContent = '0 / ' + MILESTONES.length;
+    ensureTimer();
+  }
+
+  function applyStates() {
+    for (var i = 0; i < MILESTONES.length; i++) {
+      var key = MILESTONES[i].key;
+      var row = document.getElementById('ms-' + key);
+      var feed = document.getElementById('why-' + key);
+      if (i < activeIdx)        { row.className = 'ms-row done';   setIcon(key, 'done');   feed.classList.add('collapsed'); }
+      else if (i === activeIdx) { row.className = 'ms-row active'; setIcon(key, 'active'); feed.classList.remove('collapsed'); }
+      else                      { row.className = 'ms-row pending'; setIcon(key, 'pending'); }
+    }
+    var done = Math.max(activeIdx, 0);
+    var pct = MILESTONES.length ? Math.min(Math.round(done / MILESTONES.length * 100), 95) : 0;
+    var bar = document.getElementById('progress-bar');
+    bar.style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', String(pct));
+    document.getElementById('progress-fraction').textContent = done + ' / ' + MILESTONES.length;
+  }
+
+  function renderFeed(key) {
+    var feed = document.getElementById('why-' + key);
+    if (!feed) return;
+    var shown = revealed[key].slice(-3);
+    feed.innerHTML = '';
+    shown.forEach(function(txt, idx) {
+      var line = document.createElement('div');
+      line.className = 'ms-why' + (idx === shown.length - 1 ? ' fresh' : '');
+      line.textContent = txt;
+      feed.appendChild(line);
+    });
+  }
+
+  function tick() {
+    if (activeIdx < 0 && targetIdx >= 0) { activeIdx = 0; applyStates(); }
+    if (activeIdx < 0 || !MILESTONES[activeIdx]) return;
+    var key = MILESTONES[activeIdx].key;
+    if (queues[key] && queues[key].length) {
+      revealed[key].push(queues[key].shift());
+      renderFeed(key);
+      return;
+    }
+    if (activeIdx < targetIdx) { activeIdx++; applyStates(); }
+  }
+
+  function ensureTimer() { if (!revealTimer) revealTimer = setInterval(tick, REVEAL_MS); }
+
+  function handleMsg(msg) {
+    if (msg.milestones) { renderPlan(msg.milestones); return; }
+    if (msg.milestone && msIndex.hasOwnProperty(msg.milestone)) {
+      var i = msIndex[msg.milestone];
+      if (i > targetIdx) targetIdx = i;
+      if (activeIdx < 0) { activeIdx = 0; applyStates(); }
+      if (msg.reason) queues[msg.milestone].push(msg.reason);
+    }
+  }
+
+  function completeAll() {
+    if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+    for (var i = 0; i < MILESTONES.length; i++) {
+      var key = MILESTONES[i].key;
+      var el = document.getElementById('ms-' + key);
+      if (el) { el.className = 'ms-row done'; setIcon(key, 'done'); }
+      var feed = document.getElementById('why-' + key);
+      if (feed) feed.classList.add('collapsed');
+    }
+    var bar = document.getElementById('progress-bar');
+    bar.style.width = '100%'; bar.setAttribute('aria-valuenow', '100');
+    document.getElementById('progress-fraction').textContent = MILESTONES.length + ' / ' + MILESTONES.length;
+  }
+
+  function showProgressPanel() {
+    document.getElementById('logo-block').style.display = 'none';
+    document.getElementById('form-card').style.display  = 'none';
+    document.getElementById('progress-panel').classList.add('visible');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showError(message) {
+    completeAll();
+    document.getElementById('error-card').classList.add('visible');
+    document.getElementById('error-msg').textContent = message || 'The coach could not finish your program. Your answers are saved — try again.';
+  }
+
+  function buildUserInput() {
+    var exp   = document.querySelector('input[name="experience"]:checked');
+    var goal  = document.querySelector('input[name="goal"]:checked');
+    var dpw   = document.querySelector('input[name="days_per_week"]:checked');
+    var days  = Array.from(document.querySelectorAll('input[name="days"]:checked')).map(function(e){ return e.value; });
+    var equip = Array.from(document.querySelectorAll('input[name="equipment"]:checked')).map(function(e){ return e.value; });
+    var dur    = document.querySelector('input[name="duration"]:checked');
+    var lifts  = document.getElementById('main-lifts').value.trim();
+    var inj    = document.getElementById('injuries').value.trim();
+    var notes  = document.getElementById('extra-notes').value.trim();
+    var lines  = [];
+    lines.push('Experience Level: ' + (exp  ? exp.value  : 'Intermediate'));
+    lines.push('Primary Goal: '     + (goal ? goal.value : 'Hypertrophy'));
+    lines.push('Training Frequency: ' + (dpw ? dpw.value : '4') + ' days per week');
+    if (days.length)  lines.push('Preferred Training Days: ' + days.join(', '));
+    if (equip.length) lines.push('Available Equipment: '     + equip.join(', '));
+    if (dur && dur.value !== 'unlimited') lines.push('Maximum session length: ' + dur.value + ' minutes — keep each workout within this time, use supersets if needed');
+    if (lifts)  lines.push('Main Lifts / Preferred Exercises: ' + lifts);
+    if (inj)    lines.push('Injuries / Physical Limitations: '  + inj);
+    if (notes)  lines.push('Additional Notes: ' + notes);
+    return lines.join('\n');
+  }
+
+  function disableForm() {
+    document.getElementById('form-card').querySelectorAll('input,select,textarea,button').forEach(function(el){ el.disabled = true; });
+  }
+
+  function enableForm() {
+    document.getElementById('form-card').querySelectorAll('input,select,textarea,button').forEach(function(el){ el.disabled = false; });
+  }
+
+  document.getElementById('form-card').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var persona   = document.getElementById('persona-select').value;
+    var userInput = persona ? 'Generate a strength training program for the selected persona.' : buildUserInput();
+
+    document.querySelectorAll('.form-section.has-error').forEach(function(s){ s.classList.remove('has-error'); });
+    if (!persona) {
+      var days  = document.querySelectorAll('input[name="days"]:checked').length;
+      var equip = document.querySelectorAll('input[name="equipment"]:checked').length;
+      var bad = null;
+      if (!days)  { document.getElementById('err-schedule').closest('.form-section').classList.add('has-error'); bad = bad || 'err-schedule'; }
+      if (!equip) { document.getElementById('err-equipment').closest('.form-section').classList.add('has-error'); bad = bad || 'err-equipment'; }
+      if (bad) { document.getElementById(bad).scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    }
+
+    disableForm();
+    showProgressPanel();
+
+    var fd = new FormData();
+    fd.append('user_input', userInput);
+    fd.append('persona', persona);
+
+    fetch('{{ url_for("generate_program") }}', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.job_id) { showError('Failed to start generation.'); enableForm(); return; }
+
+        var evtSource = new EventSource('/generate/stream/' + data.job_id);
+        evtSource.onmessage = function(event) {
+          var msg = JSON.parse(event.data);
+          if (msg.step === 'done') {
+            completeAll();
+            evtSource.close();
+            window.location.href = '/generate/complete/' + msg.job_id;
+            return;
+          }
+          if (msg.step === 'error' || msg.step === 'timeout') {
+            evtSource.close();
+            showError(msg.message);
+            enableForm();
+            return;
+          }
+          handleMsg(msg);
+        };
+        evtSource.onerror = function() {
+          evtSource.close();
+          showError('Connection lost. Please try again.');
+          enableForm();
+        };
+      })
+      .catch(function(err) { showError('Network error: ' + err.message); enableForm(); });
+  });
+
+  document.getElementById('btn-retry').addEventListener('click', function() {
+    document.getElementById('error-card').classList.remove('visible');
+    document.getElementById('progress-panel').classList.remove('visible');
+    document.getElementById('logo-block').style.display = '';
+    document.getElementById('form-card').style.display  = '';
+    if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+    document.getElementById('milestone-list').innerHTML = '';
+    MILESTONES = []; activeIdx = -1; targetIdx = -1;
+    enableForm();
+  });
+
+  // Saved programs
+  document.addEventListener('DOMContentLoaded', function() {
+    fetchSaved();
+    document.getElementById('load-program-btn').addEventListener('click', loadSelected);
+    document.body.classList.add('loaded');
+  });
+
+  function fetchSaved() {
+    fetch('{{ url_for("list_saved_programs") }}')
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d.success) renderSaved(d.programs); else showLoadMsg(d.message, false); })
+      .catch(function(){ showLoadMsg('Error fetching saved programs', false); });
+  }
+
+  function renderSaved(programs) {
+    var list = document.getElementById('program-list');
+    if (!programs.length) { list.innerHTML = '<div class="empty-state">No saved programs yet</div>'; return; }
+    list.innerHTML = programs.map(function(p) {
+      return '<div class="program-item" data-filename="' + p.filename + '">' +
+             '<strong>' + p.name + '</strong>' +
+             '<div class="program-details">Saved: ' + p.date + ' &middot; Weeks: ' + p.weeks + ' &middot; Current: Week ' + p.current_week + '</div>' +
+             '</div>';
+    }).join('');
+    list.querySelectorAll('.program-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        list.querySelectorAll('.program-item').forEach(function(i){ i.classList.remove('selected'); });
+        this.classList.add('selected');
+        document.getElementById('load-program-btn').disabled = false;
+      });
+    });
+  }
+
+  function loadSelected() {
+    var sel = document.querySelector('.program-item.selected');
+    if (!sel) { showLoadMsg('Select a program first', false); return; }
+    var fd = new FormData();
+    fd.append('filename', sel.dataset.filename);
+    fetch('{{ url_for("load_program") }}', { method: 'POST', body: fd })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.success) { showLoadMsg('Loaded! Redirecting…', true); setTimeout(function(){ window.location.href = d.redirect; }, 800); }
+        else showLoadMsg(d.message, false);
+      })
+      .catch(function(){ showLoadMsg('Error loading program', false); });
+  }
+
+  function showLoadMsg(msg, ok) {
+    var el = document.getElementById('load-message');
+    el.textContent = msg;
+    el.className = ok ? 'msg-success' : 'msg-error';
+    el.style.display = 'block';
+    if (!ok) setTimeout(function(){ el.style.display = 'none'; }, 4000);
+  }
+</script>
+</body>
+</html>
